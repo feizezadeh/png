@@ -102,11 +102,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Filter tiles based on user role
         const userRole = appState.currentUser.role;
         document.querySelectorAll('#tile-menu .tile').forEach(tile => {
-            const requiredRole = tile.dataset.role;
-            if (!requiredRole || requiredRole === userRole) {
+            const requiredRoles = tile.dataset.role;
+            if (!requiredRoles) {
+                // No role requirement, show to all
                 tile.style.display = 'block';
             } else {
-                tile.style.display = 'none';
+                // Show if user's role is in the list of required roles
+                if (requiredRoles.split(' ').includes(userRole)) {
+                    tile.style.display = 'block';
+                } else {
+                    tile.style.display = 'none';
+                }
             }
         });
 
@@ -931,13 +937,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const users = result.data;
-        let tableRows = users.map(u => `
-            <tr>
-                <td>${u.username}</td>
-                <td>${u.role}</td>
-                <td>${u.company_name || '---'}</td>
-            </tr>
-        `).join('');
+        let tableRows = users.map(u => {
+            // Don't show edit/delete for the user themselves
+            const isCurrentUser = u.id == appState.currentUser.id;
+            const actions = isCurrentUser ? '' : `
+                <button class="btn-edit" data-id="${u.id}">ویرایش</button>
+                <button class="btn-delete danger" data-id="${u.id}">حذف</button>
+            `;
+            return `
+                <tr>
+                    <td>${u.username}</td>
+                    <td>${u.role}</td>
+                    <td>${u.company_name || '---'}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        }).join('');
 
          pageContent.innerHTML = `
             <h2>مدیریت کاربران</h2>
@@ -948,6 +963,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <th>نام کاربری</th>
                         <th>نقش</th>
                         <th>شرکت</th>
+                        <th>عملیات</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -957,18 +973,89 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         document.getElementById('add-new-user-btn').addEventListener('click', () => renderAddUserForm());
+        pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderEditUserForm(e.target.dataset.id)));
+        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteUser(e.target.dataset.id)));
+    }
+
+    async function renderEditUserForm(id) {
+        const title = 'ویرایش کاربر';
+        const userRole = appState.currentUser.role;
+
+        // Fetch user data first
+        // Note: This API call is not scoped, but the backend will prevent fetching users from other companies.
+        const userResult = await fetchAPI(`api/users.php?id=${id}`);
+        if (!userResult || userResult.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا: کاربر یافت نشد.</h2>';
+            return;
+        }
+        const user = userResult.data;
+
+        let roleOptions = '';
+        if (userRole === 'super_admin') {
+            // A super admin can change a company admin's company, etc.
+            // Simplified for now: cannot change role or company in edit form.
+            roleOptions = `<option value="${user.role}" selected>${user.role}</option>`;
+        } else if (userRole === 'company_admin') {
+            roleOptions = `
+                <option value="installer" ${user.role === 'installer' ? 'selected' : ''}>نصاب</option>
+                <option value="support" ${user.role === 'support' ? 'selected' : ''}>پشتیبان</option>
+            `;
+        }
+
+        pageContent.innerHTML = `
+             <h2>${title}: ${user.username}</h2>
+            <form id="user-form">
+                <input type="hidden" name="id" value="${user.id}">
+                <div class="form-group">
+                    <label for="user-password">رمز عبور جدید (اختیاری)</label>
+                    <input type="password" id="user-password" name="password">
+                    <small>برای تغییر رمز عبور، مقدار جدید را وارد کنید. در غیر این صورت، خالی بگذارید.</small>
+                </div>
+                <div class="form-group">
+                    <label for="user-role">نقش</label>
+                    <select id="user-role" name="role" required>
+                        ${roleOptions}
+                    </select>
+                </div>
+                <button type="submit">ذخیره تغییرات</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+
+        document.getElementById('user-form').addEventListener('submit', saveUser);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
     }
 
     async function renderAddUserForm() {
         const title = 'افزودن کاربر جدید';
-        pageContent.innerHTML = `<h2>${title}</h2><p>در حال بارگذاری فرم...</p>`;
+        const userRole = appState.currentUser.role;
+        let roleOptions = '';
+        let companySelector = '';
 
-        const companiesResult = await fetchAPI('api/companies.php');
-        if (!companiesResult || companiesResult.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا: شرکت‌ها یافت نشدند.</h2>';
-            return;
+        if (userRole === 'super_admin') {
+            roleOptions = '<option value="company_admin">ادمین شرکت</option>';
+            const companiesResult = await fetchAPI('api/companies.php');
+            if (!companiesResult || companiesResult.status !== 'success') {
+                pageContent.innerHTML = '<h2>خطا: شرکت‌ها یافت نشدند.</h2>';
+                return;
+            }
+            const companiesOptions = companiesResult.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            companySelector = `
+                 <div class="form-group" id="company-select-group">
+                    <label for="user-company-id">شرکت</label>
+                    <select id="user-company-id" name="company_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${companiesOptions}
+                    </select>
+                </div>
+            `;
+        } else if (userRole === 'company_admin') {
+            roleOptions = `
+                <option value="installer">نصاب</option>
+                <option value="support">پشتیبان</option>
+            `;
+            // Company selector is not needed, it's set automatically on backend
         }
-        const companiesOptions = companiesResult.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
         pageContent.innerHTML = `
              <h2>${title}</h2>
@@ -984,17 +1071,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="form-group">
                     <label for="user-role">نقش</label>
                     <select id="user-role" name="role" required>
-                        <option value="company_admin">ادمین شرکت</option>
-                        <!-- Add other roles here as company admin gets implemented -->
+                        ${roleOptions}
                     </select>
                 </div>
-                 <div class="form-group" id="company-select-group">
-                    <label for="user-company-id">شرکت</label>
-                    <select id="user-company-id" name="company_id" required>
-                        <option value="">انتخاب کنید...</option>
-                        ${companiesOptions}
-                    </select>
-                </div>
+                ${companySelector}
                 <button type="submit">ذخیره</button>
                 <button type="button" id="cancel-btn">انصراف</button>
             </form>
@@ -1010,11 +1090,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
 
-        const result = await fetchAPI('api/users.php', { method: 'POST', body: data });
+        // If password is not provided on edit, don't send it
+        if (data.id && !data.password) {
+            delete data.password;
+        }
+
+        const method = data.id ? 'PUT' : 'POST';
+
+        const result = await fetchAPI('api/users.php', { method: method, body: data });
 
         if (result && result.status === 'success') {
             alert(result.message);
             navigateTo('users-management');
+        }
+    }
+
+    async function deleteUser(id) {
+        if (confirm('آیا از حذف این کاربر مطمئن هستید؟')) {
+            const result = await fetchAPI(`api/users.php?id=${id}`, { method: 'DELETE' });
+             if (result && result.status === 'success') {
+                alert(result.message);
+                navigateTo('users-management');
+            }
         }
     }
 

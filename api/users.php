@@ -23,7 +23,12 @@ switch ($method) {
     case 'POST':
         handle_post_users($pdo, $user_role);
         break;
-    // PUT and DELETE will be added in the next phase
+    case 'PUT':
+        handle_put_users($pdo, $user_role, $user_company_id);
+        break;
+    case 'DELETE':
+        handle_delete_users($pdo, $user_role, $user_company_id);
+        break;
     default:
         header('HTTP/1.1 405 Method Not Allowed');
         echo json_encode(['status' => 'error', 'message' => 'متد غیر مجاز']);
@@ -69,11 +74,11 @@ function handle_post_users($pdo, $user_role) {
              return;
         }
         $allowed = true;
+    } elseif ($user_role === 'company_admin' && in_array($data['role'], ['installer', 'support'])) {
+        $allowed = true;
+        // Force the company_id to be the admin's own company
+        $data['company_id'] = $_SESSION['company_id'];
     }
-    // In a later phase, add logic for company_admin creating users
-    // elseif ($user_role === 'company_admin' && in_array($data['role'], ['installer', 'support'])) {
-    //     $allowed = true;
-    // }
 
     if (!$allowed) {
         header('HTTP/1.1 403 Forbidden');
@@ -109,6 +114,108 @@ function handle_post_users($pdo, $user_role) {
             header('HTTP/1.1 500 Internal Server Error');
             echo json_encode(['status' => 'error', 'message' => 'خطا در ایجاد کاربر']);
         }
+    }
+}
+
+function handle_put_users($pdo, $user_role, $user_company_id) {
+    $data = json_decode(file_get_contents('php://input'), true);
+
+    if (empty($data['id'])) {
+        header('HTTP/1.1 400 Bad Request');
+        echo json_encode(['status' => 'error', 'message' => 'شناسه کاربر الزامی است']);
+        return;
+    }
+
+    // A company_admin can only edit users in their own company.
+    if ($user_role === 'company_admin') {
+        $stmt = $pdo->prepare("SELECT company_id FROM users WHERE id = ?");
+        $stmt->execute([$data['id']]);
+        $target_user = $stmt->fetch();
+        if (!$target_user || $target_user['company_id'] != $user_company_id) {
+            header('HTTP/1.1 403 Forbidden');
+            echo json_encode(['status' => 'error', 'message' => 'شما اجازه ویرایش این کاربر را ندارید.']);
+            return;
+        }
+    }
+
+    // Build query dynamically based on what's provided
+    $fields = [];
+    $params = [];
+    if (!empty($data['password'])) {
+        $fields[] = "password = ?";
+        $params[] = password_hash($data['password'], PASSWORD_DEFAULT);
+    }
+    if (!empty($data['role'])) {
+        $fields[] = "role = ?";
+        $params[] = $data['role'];
+    }
+    // A super_admin can also change a user's company
+    if ($user_role === 'super_admin' && isset($data['company_id'])) {
+         $fields[] = "company_id = ?";
+         $params[] = $data['company_id'] ?: null;
+    }
+
+    if (empty($fields)) {
+        header('HTTP/1.1 400 Bad Request');
+        echo json_encode(['status' => 'error', 'message' => 'هیچ فیلدی برای بروزرسانی مشخص نشده است.']);
+        return;
+    }
+
+    $params[] = $data['id'];
+    $sql = "UPDATE users SET " . implode(', ', $fields) . " WHERE id = ?";
+
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        echo json_encode(['status' => 'success', 'message' => 'کاربر با موفقیت بروزرسانی شد.']);
+    } catch (PDOException $e) {
+        error_log("PUT users Error: " . $e->getMessage());
+        header('HTTP/1.1 500 Internal Server Error');
+        echo json_encode(['status' => 'error', 'message' => 'خطا در بروزرسانی کاربر.']);
+    }
+}
+
+function handle_delete_users($pdo, $user_role, $user_company_id) {
+    if (!isset($_GET['id'])) {
+        header('HTTP/1.1 400 Bad Request');
+        echo json_encode(['status' => 'error', 'message' => 'شناسه کاربر الزامی است']);
+        return;
+    }
+    $user_id_to_delete = $_GET['id'];
+
+    // Prevent users from deleting themselves
+    if ($user_id_to_delete == $_SESSION['user_id']) {
+        header('HTTP/1.1 403 Forbidden');
+        echo json_encode(['status' => 'error', 'message' => 'شما نمی‌توانید خودتان را حذف کنید.']);
+        return;
+    }
+
+    // A company_admin can only delete users in their own company.
+    if ($user_role === 'company_admin') {
+        $stmt = $pdo->prepare("SELECT company_id FROM users WHERE id = ?");
+        $stmt->execute([$user_id_to_delete]);
+        $target_user = $stmt->fetch();
+        if (!$target_user || $target_user['company_id'] != $user_company_id) {
+            header('HTTP/1.1 403 Forbidden');
+            echo json_encode(['status' => 'error', 'message' => 'شما اجازه حذف این کاربر را ندارید.']);
+            return;
+        }
+    }
+
+    try {
+        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+        $stmt->execute([$user_id_to_delete]);
+
+        if ($stmt->rowCount()) {
+            echo json_encode(['status' => 'success', 'message' => 'کاربر با موفقیت حذف شد.']);
+        } else {
+            header('HTTP/1.1 404 Not Found');
+            echo json_encode(['status' => 'error', 'message' => 'کاربر یافت نشد.']);
+        }
+    } catch (PDOException $e) {
+        error_log("DELETE users Error: " . $e->getMessage());
+        header('HTTP/1.1 500 Internal Server Error');
+        echo json_encode(['status' => 'error', 'message' => 'خطا در حذف کاربر.']);
     }
 }
 ?>

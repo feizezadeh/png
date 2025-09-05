@@ -74,7 +74,7 @@
                     <i class="fa-solid fa-building fa-3x"></i>
                     <span>مدیریت شرکت‌ها</span>
                 </div>
-                <div class="tile" data-target="users-management" data-role="super_admin">
+                <div class="tile" data-target="users-management" data-role="super_admin company_admin">
                     <i class="fa-solid fa-users-cog fa-3x"></i>
                     <span>مدیریت کاربران</span>
                 </div>

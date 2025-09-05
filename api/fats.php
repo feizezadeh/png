@@ -11,9 +11,12 @@ secure_api_endpoint(['admin', 'support']);
 $method = $_SERVER['REQUEST_METHOD'];
 
 // A simple router
+$user_role = $_SESSION['role'];
+$user_company_id = $_SESSION['company_id'] ?? null;
+
 switch ($method) {
     case 'GET':
-        handle_get_fats($pdo);
+        handle_get_fats($pdo, $user_role, $user_company_id);
         break;
     case 'POST':
         handle_post_fats($pdo);
@@ -30,9 +33,9 @@ switch ($method) {
         break;
 }
 
-function handle_get_fats($pdo) {
+function handle_get_fats($pdo, $user_role, $user_company_id) {
     try {
-        $query = "
+        $base_query = "
             SELECT
                 f.id, f.fat_number, f.latitude, f.longitude, f.address, f.splitter_type, f.created_at,
                 tc.name AS telecom_center_name,
@@ -41,29 +44,44 @@ function handle_get_fats($pdo) {
             JOIN telecom_centers tc ON f.telecom_center_id = tc.id
         ";
 
+        $conditions = [];
+        $params = [];
+
+        // Data Scoping
+        if ($user_role !== 'super_admin') {
+            $conditions[] = "f.company_id = ?";
+            $params[] = $user_company_id;
+        }
+
         if (isset($_GET['id'])) {
-            // Get a single FAT
-            $query .= " WHERE f.id = ?";
+            $conditions[] = "f.id = ?";
+            $params[] = $_GET['id'];
+
+            $query = $base_query . " WHERE " . implode(" AND ", $conditions);
             $stmt = $pdo->prepare($query);
-            $stmt->execute([$_GET['id']]);
+            $stmt->execute($params);
             $fat = $stmt->fetch();
+
             if ($fat) {
                 echo json_encode(['status' => 'success', 'data' => $fat]);
             } else {
                 header('HTTP/1.1 404 Not Found');
                 echo json_encode(['status' => 'error', 'message' => 'FAT یافت نشد']);
             }
-        } elseif (isset($_GET['telecom_center_id'])) {
-            // Get FATs for a specific telecom center
-            $query .= " WHERE f.telecom_center_id = ? ORDER BY f.fat_number";
-            $stmt = $pdo->prepare($query);
-            $stmt->execute([$_GET['telecom_center_id']]);
-            $fats = $stmt->fetchAll();
-            echo json_encode(['status' => 'success', 'data' => $fats]);
         } else {
-            // Get all FATs
+            if (isset($_GET['telecom_center_id'])) {
+                $conditions[] = "f.telecom_center_id = ?";
+                $params[] = $_GET['telecom_center_id'];
+            }
+
+            $query = $base_query;
+            if (!empty($conditions)) {
+                $query .= " WHERE " . implode(" AND ", $conditions);
+            }
             $query .= " ORDER BY f.fat_number";
-            $stmt = $pdo->query($query);
+
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
             $fats = $stmt->fetchAll();
             echo json_encode(['status' => 'success', 'data' => $fats]);
         }
@@ -76,6 +94,21 @@ function handle_get_fats($pdo) {
 
 function handle_post_fats($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
+
+    // --- Authorization & Scoping ---
+    $company_id_to_set = null;
+    if ($_SESSION['role'] === 'company_admin') {
+        $company_id_to_set = $_SESSION['company_id'];
+    } elseif ($_SESSION['role'] === 'super_admin' && !empty($data['company_id'])) {
+        $company_id_to_set = $data['company_id'];
+    }
+    // A super_admin creating a global FAT is a possibility, but let's assume FATs must belong to a company.
+    if ($company_id_to_set === null && $_SESSION['role'] !== 'super_admin') {
+         header('HTTP/1.1 403 Forbidden');
+         echo json_encode(['status' => 'error', 'message' => 'شما باید به یک شرکت منتسب باشید تا بتوانید FAT ایجاد کنید.']);
+         return;
+    }
+    // --- End Authorization ---
 
     // Input validation
     $required_fields = ['fat_number', 'telecom_center_id', 'latitude', 'longitude', 'splitter_type'];
@@ -95,7 +128,7 @@ function handle_post_fats($pdo) {
     }
 
     try {
-        $sql = "INSERT INTO fats (fat_number, telecom_center_id, latitude, longitude, address, splitter_type) VALUES (?, ?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO fats (fat_number, telecom_center_id, company_id, latitude, longitude, address, splitter_type) VALUES (?, ?, ?, ?, ?, ?, ?)";
         $stmt = $pdo->prepare($sql);
 
         // Sanitize inputs
@@ -106,7 +139,7 @@ function handle_post_fats($pdo) {
         $address = isset($data['address']) ? htmlspecialchars(strip_tags($data['address'])) : null;
         $splitter_type = $data['splitter_type'];
 
-        $stmt->execute([$fat_number, $telecom_center_id, $latitude, $longitude, $address, $splitter_type]);
+        $stmt->execute([$fat_number, $telecom_center_id, $company_id_to_set, $latitude, $longitude, $address, $splitter_type]);
 
         $new_id = $pdo->lastInsertId();
 
@@ -143,13 +176,29 @@ function handle_put_fats($pdo) {
         echo json_encode(['status' => 'error', 'message' => 'شناسه FAT الزامی است']);
         return;
     }
-    // Further validation for other fields can be added here
+
+    // --- Authorization ---
+    if ($_SESSION['role'] === 'company_admin') {
+        $stmt = $pdo->prepare("SELECT company_id FROM fats WHERE id = ?");
+        $stmt->execute([$data['id']]);
+        $fat = $stmt->fetch();
+        if (!$fat || $fat['company_id'] != $_SESSION['company_id']) {
+            header('HTTP/1.1 403 Forbidden');
+            echo json_encode(['status' => 'error', 'message' => 'شما اجازه ویرایش این FAT را ندارید.']);
+            return;
+        }
+    }
+    // --- End Authorization ---
 
     try {
+        // A company admin cannot change the company of a FAT. Only super_admin can.
+        $company_sql = ($_SESSION['role'] === 'super_admin' && isset($data['company_id'])) ? "company_id = ?, " : "";
+
         $sql = "
             UPDATE fats SET
                 fat_number = ?,
                 telecom_center_id = ?,
+                {$company_sql}
                 latitude = ?,
                 longitude = ?,
                 address = ?,
@@ -158,15 +207,20 @@ function handle_put_fats($pdo) {
         ";
         $stmt = $pdo->prepare($sql);
 
-        $stmt->execute([
+        $params = [
             htmlspecialchars(strip_tags($data['fat_number'])),
-            filter_var($data['telecom_center_id'], FILTER_VALIDATE_INT),
-            filter_var($data['latitude'], FILTER_VALIDATE_FLOAT),
-            filter_var($data['longitude'], FILTER_VALIDATE_FLOAT),
-            htmlspecialchars(strip_tags($data['address'])),
-            $data['splitter_type'],
-            $data['id']
-        ]);
+            filter_var($data['telecom_center_id'], FILTER_VALIDATE_INT)
+        ];
+        if ($_SESSION['role'] === 'super_admin' && isset($data['company_id'])) {
+            $params[] = $data['company_id'] ?: null;
+        }
+        $params[] = filter_var($data['latitude'], FILTER_VALIDATE_FLOAT);
+        $params[] = filter_var($data['longitude'], FILTER_VALIDATE_FLOAT);
+        $params[] = htmlspecialchars(strip_tags($data['address']));
+        $params[] = $data['splitter_type'];
+        $params[] = $data['id'];
+
+        $stmt->execute($params);
 
         if ($stmt->rowCount()) {
             echo json_encode(['status' => 'success', 'message' => 'FAT با موفقیت بروزرسانی شد']);

@@ -9,10 +9,12 @@ require_once '../includes/check_permission.php';
 secure_api_endpoint(['admin', 'support']);
 
 $method = $_SERVER['REQUEST_METHOD'];
+$user_role = $_SESSION['role'];
+$user_company_id = $_SESSION['company_id'] ?? null;
 
 switch ($method) {
     case 'GET':
-        handle_get_subscriptions($pdo);
+        handle_get_subscriptions($pdo, $user_role, $user_company_id);
         break;
     case 'POST':
         handle_post_subscriptions($pdo);
@@ -29,7 +31,7 @@ switch ($method) {
         break;
 }
 
-function handle_get_subscriptions($pdo) {
+function handle_get_subscriptions($pdo, $user_role, $user_company_id) {
     try {
         $query = "
             SELECT
@@ -45,6 +47,12 @@ function handle_get_subscriptions($pdo) {
 
         $params = [];
         $where_clauses = [];
+
+        // Data Scoping
+        if ($user_role !== 'super_admin') {
+            $where_clauses[] = "f.company_id = ?";
+            $params[] = $user_company_id;
+        }
 
         if (isset($_GET['id'])) {
             $where_clauses[] = "sub.id = ?";

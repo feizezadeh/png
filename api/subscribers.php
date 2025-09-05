@@ -9,10 +9,12 @@ require_once '../includes/check_permission.php';
 secure_api_endpoint(['admin', 'support']);
 
 $method = $_SERVER['REQUEST_METHOD'];
+$user_role = $_SESSION['role'];
+$user_company_id = $_SESSION['company_id'] ?? null;
 
 switch ($method) {
     case 'GET':
-        handle_get_subscribers($pdo);
+        handle_get_subscribers($pdo, $user_role, $user_company_id);
         break;
     case 'POST':
         handle_post_subscribers($pdo);
@@ -29,13 +31,34 @@ switch ($method) {
         break;
 }
 
-function handle_get_subscribers($pdo) {
+function handle_get_subscribers($pdo, $user_role, $user_company_id) {
     try {
+        $base_query = "SELECT * FROM subscribers";
+        $conditions = [];
+        $params = [];
+
+        // Data Scoping
+        if ($user_role !== 'super_admin') {
+            // Use a JOIN for better performance
+            $base_query = "
+                SELECT DISTINCT s.*
+                FROM subscribers s
+                JOIN subscriptions sub ON s.id = sub.subscriber_id
+                JOIN fats f ON sub.fat_id = f.id
+            ";
+            $conditions[] = "f.company_id = ?";
+            $params[] = $user_company_id;
+        }
+
         if (isset($_GET['id'])) {
-            // Get a single subscriber
-            $stmt = $pdo->prepare("SELECT * FROM subscribers WHERE id = ?");
-            $stmt->execute([$_GET['id']]);
+            $conditions[] = "id = ?";
+            $params[] = $_GET['id'];
+
+            $query = $base_query . " WHERE " . implode(" AND ", $conditions);
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
             $subscriber = $stmt->fetch();
+
             if ($subscriber) {
                 echo json_encode(['status' => 'success', 'data' => $subscriber]);
             } else {
@@ -43,8 +66,14 @@ function handle_get_subscribers($pdo) {
                 echo json_encode(['status' => 'error', 'message' => 'مشترک یافت نشد']);
             }
         } else {
-            // Get all subscribers
-            $stmt = $pdo->query("SELECT * FROM subscribers ORDER BY full_name");
+            $query = $base_query;
+            if (!empty($conditions)) {
+                $query .= " WHERE " . implode(" AND ", $conditions);
+            }
+            $query .= " ORDER BY full_name";
+
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
             $subscribers = $stmt->fetchAll();
             echo json_encode(['status' => 'success', 'data' => $subscribers]);
         }
