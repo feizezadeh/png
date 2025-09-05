@@ -196,9 +196,10 @@ document.addEventListener('DOMContentLoaded', () => {
         pageContent.innerHTML = `
             <h2>مدیریت مراکز مخابراتی</h2>
             <button id="add-new-center-btn">افزودن مرکز جدید</button>
-            <table>
-                <thead>
-                    <tr>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
                         <th>شناسه</th>
                         <th>نام مرکز</th>
                         <th>تاریخ ایجاد</th>
@@ -303,9 +304,10 @@ document.addEventListener('DOMContentLoaded', () => {
         pageContent.innerHTML = `
             <h2>مدیریت FAT ها</h2>
             <button id="add-new-fat-btn">افزودن FAT جدید</button>
-            <table>
-                <thead>
-                    <tr>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
                         <th>شماره FAT</th>
                         <th>مرکز مخابراتی</th>
                         <th>نوع اسپلیتر</th>
@@ -372,7 +374,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>موقعیت مکانی (روی نقشه کلیک کنید یا نشانگر را جابجا کنید)</label>
+                    <label>موقعیت مکانی</label>
+                    <button type="button" id="use-gps-btn" style="margin-bottom: 10px;">
+                        <i class="fa-solid fa-location-crosshairs"></i> استفاده از موقعیت مکانی من
+                    </button>
                     <div id="map"></div>
                 </div>
                  <div class="form-group">
@@ -410,7 +415,70 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let marker = L.marker([lat, lng], { draggable: true }).addTo(map);
 
+        const updateFields = (latlng) => {
+            document.getElementById('latitude').value = latlng.lat;
+            document.getElementById('longitude').value = latlng.lng;
+        };
+
         marker.on('dragend', function(event) {
+            const position = marker.getLatLng();
+            updateFields(position);
+        });
+
+        map.on('click', function(e) {
+            marker.setLatLng(e.latlng);
+            updateFields(e.latlng);
+        });
+
+        document.getElementById('use-gps-btn').addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                alert('مرورگر شما از موقعیت‌یابی جغرافیایی پشتیبانی نمی‌کند.');
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    const latlng = { lat: latitude, lng: longitude };
+                    map.setView(latlng, 16);
+                    marker.setLatLng(latlng);
+                    updateFields(latlng);
+                },
+                () => {
+                    alert('امکان دریافت موقعیت مکانی شما وجود ندارد. لطفاً دسترسی لازم را به مرورگر بدهید.');
+                }
+            );
+        });
+    }
+
+    async function saveFat(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const endpoint = data.id ? `api/fats.php` : 'api/fats.php';
+        const method = data.id ? 'PUT' : 'POST';
+
+        const result = await fetchAPI(endpoint, {
+            method: method,
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('fats-management');
+        }
+    }
+
+    async function deleteFat(id) {
+        if (confirm('آیا از حذف این FAT و تمام اشتراک‌های مرتبط با آن مطمئن هستید؟')) {
+            const result = await fetchAPI(`api/fats.php?id=${id}`, { method: 'DELETE' });
+             if (result && result.status === 'success') {
+                alert(result.message);
+                navigateTo('fats-management');
+            }
+        }
+    }
             const position = marker.getLatLng();
             document.getElementById('latitude').value = position.lat;
             document.getElementById('longitude').value = position.lng;
@@ -544,10 +612,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }).join('');
 
                 resultsContainer.innerHTML = `
-                    <table class="report-table">
-                        <thead><tr>${tableHeaders}</tr></thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>
+                    <div class="table-container">
+                        <table class="report-table">
+                            <thead><tr>${tableHeaders}</tr></thead>
+                            <tbody>${tableRows}</tbody>
+                        </table>
+                    </div>
                 `;
             } else {
                  resultsContainer.innerHTML = '<p>خطا در دریافت گزارش.</p>';
@@ -583,9 +653,10 @@ document.addEventListener('DOMContentLoaded', () => {
         pageContent.innerHTML = `
             <h2>مدیریت مشترکین</h2>
             <button id="add-new-subscriber-btn">افزودن مشترک جدید</button>
-            <table>
-                <thead>
-                    <tr>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
                         <th>نام کامل</th>
                         <th>شماره موبایل</th>
                         <th>کد ملی</th>
@@ -699,9 +770,10 @@ document.addEventListener('DOMContentLoaded', () => {
         pageContent.innerHTML = `
             <h2>مدیریت اشتراک‌ها</h2>
             <button id="add-new-subscription-btn">افزودن اشتراک جدید</button>
-            <table>
-                <thead>
-                    <tr>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
                         <th>نام مشترک</th>
                         <th>شماره FAT</th>
                         <th>شماره پورت</th>
@@ -957,9 +1029,10 @@ document.addEventListener('DOMContentLoaded', () => {
          pageContent.innerHTML = `
             <h2>مدیریت کاربران</h2>
             <button id="add-new-user-btn">افزودن کاربر جدید</button>
-            <table>
-                <thead>
-                    <tr>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
                         <th>نام کاربری</th>
                         <th>نقش</th>
                         <th>شرکت</th>
