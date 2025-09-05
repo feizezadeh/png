@@ -158,6 +158,11 @@ button.danger {
     font-weight: 500;
 }
 
+/* Hide role-specific elements by default */
+[data-role] {
+    display: none;
+}
+
 /* --- Tables --- */
 #page-content table {
     width: 100%;

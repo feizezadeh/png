@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (result && result.status === 'success') {
-            appState.currentUser = result.data;
+            appState.currentUser = result.data; // This now contains username and role
             showDashboard();
         } else {
             loginError.textContent = result ? result.message : 'خطای ناشناخته در ورود.';
@@ -98,6 +98,18 @@ document.addEventListener('DOMContentLoaded', () => {
         loginContainer.style.display = 'none';
         dashboardContainer.style.display = 'block';
         logoutBtn.style.display = 'inline-block';
+
+        // Filter tiles based on user role
+        const userRole = appState.currentUser.role;
+        document.querySelectorAll('#tile-menu .tile').forEach(tile => {
+            const requiredRole = tile.dataset.role;
+            if (!requiredRole || requiredRole === userRole) {
+                tile.style.display = 'block';
+            } else {
+                tile.style.display = 'none';
+            }
+        });
+
         navigateTo('dashboard'); // Navigate to the main tile menu view
     }
 
@@ -134,6 +146,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'subscriptions-management':
                 renderSubscriptionsManagement();
+                break;
+            case 'companies-management':
+                renderCompaniesManagement();
+                break;
+            case 'users-management':
+                renderUsersManagement();
                 break;
             default:
                 pageContent.innerHTML = '<h2>صفحه مورد نظر یافت نشد</h2>';
@@ -798,6 +816,208 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
+
+    // --- CRUD for Companies (Super Admin) ---
+
+    async function renderCompaniesManagement() {
+        const result = await fetchAPI('api/companies.php');
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری شرکت‌ها</h2>';
+            return;
+        }
+
+        const companies = result.data;
+        let tableRows = companies.map(c => `
+            <tr>
+                <td>${c.name}</td>
+                <td>${c.expires_at ? new Date(c.expires_at).toLocaleDateString('fa-IR') : 'نامحدود'}</td>
+                <td>
+                    <button class="btn-edit" data-id="${c.id}">ویرایش</button>
+                    <button class="btn-delete danger" data-id="${c.id}">حذف</button>
+                </td>
+            </tr>
+        `).join('');
+
+        pageContent.innerHTML = `
+            <h2>مدیریت شرکت‌ها</h2>
+            <button id="add-new-company-btn">افزودن شرکت جدید</button>
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام شرکت</th>
+                        <th>تاریخ انقضا</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+        `;
+
+        document.getElementById('add-new-company-btn').addEventListener('click', () => renderAddEditCompanyForm());
+        pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditCompanyForm(e.target.dataset.id)));
+        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteCompany(e.target.dataset.id)));
+    }
+
+    async function renderAddEditCompanyForm(id = null) {
+        let company = { id: null, name: '', expires_at: '' };
+        const title = id ? 'ویرایش شرکت' : 'افزودن شرکت';
+
+        if (id) {
+            const result = await fetchAPI(`api/companies.php?id=${id}`);
+            if (result && result.status === 'success') {
+                company = result.data;
+            }
+        }
+
+        pageContent.innerHTML = `
+            <h2>${title}</h2>
+            <form id="company-form">
+                <input type="hidden" name="id" value="${company.id || ''}">
+                <div class="form-group">
+                    <label for="company-name">نام شرکت</label>
+                    <input type="text" id="company-name" name="name" value="${company.name}" required>
+                </div>
+                <div class="form-group">
+                    <label for="expires-at">تاریخ انقضا (اختیاری)</label>
+                    <input type="text" id="expires-at" name="expires_at" value="${company.expires_at ? company.expires_at.split(' ')[0] : ''}" data-jdp>
+                </div>
+                <button type="submit">ذخیره</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+
+        jalaliDatepicker.startWatch({ selector: '[data-jdp]', time: false });
+        document.getElementById('company-form').addEventListener('submit', saveCompany);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('companies-management'));
+    }
+
+    async function saveCompany(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const endpoint = data.id ? `api/companies.php` : 'api/companies.php';
+        const method = data.id ? 'PUT' : 'POST';
+
+        const result = await fetchAPI(endpoint, { method: method, body: data });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('companies-management');
+        }
+    }
+
+    async function deleteCompany(id) {
+        if (confirm('آیا از حذف این شرکت مطمئن هستید؟ تمام کاربران و FAT های مرتبط حذف یا بدون شرکت خواهند شد.')) {
+            const result = await fetchAPI(`api/companies.php?id=${id}`, { method: 'DELETE' });
+             if (result && result.status === 'success') {
+                alert(result.message);
+                navigateTo('companies-management');
+            }
+        }
+    }
+
+    // --- CRUD for Users (Super Admin) ---
+
+    async function renderUsersManagement() {
+        // For now, only GET and POST (for super_admin) are implemented
+        const result = await fetchAPI('api/users.php');
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری کاربران</h2>';
+            return;
+        }
+
+        const users = result.data;
+        let tableRows = users.map(u => `
+            <tr>
+                <td>${u.username}</td>
+                <td>${u.role}</td>
+                <td>${u.company_name || '---'}</td>
+            </tr>
+        `).join('');
+
+         pageContent.innerHTML = `
+            <h2>مدیریت کاربران</h2>
+            <button id="add-new-user-btn">افزودن کاربر جدید</button>
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام کاربری</th>
+                        <th>نقش</th>
+                        <th>شرکت</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+        `;
+
+        document.getElementById('add-new-user-btn').addEventListener('click', () => renderAddUserForm());
+    }
+
+    async function renderAddUserForm() {
+        const title = 'افزودن کاربر جدید';
+        pageContent.innerHTML = `<h2>${title}</h2><p>در حال بارگذاری فرم...</p>`;
+
+        const companiesResult = await fetchAPI('api/companies.php');
+        if (!companiesResult || companiesResult.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا: شرکت‌ها یافت نشدند.</h2>';
+            return;
+        }
+        const companiesOptions = companiesResult.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+        pageContent.innerHTML = `
+             <h2>${title}</h2>
+            <form id="user-form">
+                <div class="form-group">
+                    <label for="user-username">نام کاربری</label>
+                    <input type="text" id="user-username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="user-password">رمز عبور</label>
+                    <input type="password" id="user-password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="user-role">نقش</label>
+                    <select id="user-role" name="role" required>
+                        <option value="company_admin">ادمین شرکت</option>
+                        <!-- Add other roles here as company admin gets implemented -->
+                    </select>
+                </div>
+                 <div class="form-group" id="company-select-group">
+                    <label for="user-company-id">شرکت</label>
+                    <select id="user-company-id" name="company_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${companiesOptions}
+                    </select>
+                </div>
+                <button type="submit">ذخیره</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+
+        document.getElementById('user-form').addEventListener('submit', saveUser);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
+    }
+
+    async function saveUser(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const result = await fetchAPI('api/users.php', { method: 'POST', body: data });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('users-management');
+        }
+    }
+
 
     // --- Initial Check ---
     // A simple check to see if a session is active.

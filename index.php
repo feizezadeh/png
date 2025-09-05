@@ -70,6 +70,14 @@
                     <i class="fa-solid fa-building-columns fa-3x"></i>
                     <span>مراکز مخابراتی</span>
                 </div>
+                <div class="tile" data-target="companies-management" data-role="super_admin">
+                    <i class="fa-solid fa-building fa-3x"></i>
+                    <span>مدیریت شرکت‌ها</span>
+                </div>
+                <div class="tile" data-target="users-management" data-role="super_admin">
+                    <i class="fa-solid fa-users-cog fa-3x"></i>
+                    <span>مدیریت کاربران</span>
+                </div>
             </div>
 
             <!-- Dynamic Content Area -->
