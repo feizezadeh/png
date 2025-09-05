@@ -78,6 +78,10 @@
                     <i class="fa-solid fa-users-cog fa-3x"></i>
                     <span>مدیریت کاربران</span>
                 </div>
+                <div class="tile" data-target="installer-dashboard" data-role="installer">
+                    <i class="fa-solid fa-screwdriver-wrench fa-3x"></i>
+                    <span>داشبورد نصاب</span>
+                </div>
             </div>
 
             <!-- Dynamic Content Area -->

@@ -1,0 +1,17 @@
+<h2>ویرایش کاربر: <span id="edit-username"></span></h2>
+<form id="user-form">
+    <input type="hidden" name="id" id="edit-user-id">
+    <div class="form-group">
+        <label for="user-password">رمز عبور جدید (اختیاری)</label>
+        <input type="password" id="user-password" name="password">
+        <small>برای تغییر رمز عبور، مقدار جدید را وارد کنید. در غیر این صورت، خالی بگذارید.</small>
+    </div>
+    <div class="form-group">
+        <label for="user-role">نقش</label>
+        <select id="user-role" name="role" required>
+            <!-- D_ROLE_OPTIONS -->
+        </select>
+    </div>
+    <button type="submit">ذخیره تغییرات</button>
+    <button type="button" id="cancel-btn">انصراف</button>
+</form>

@@ -1,0 +1,24 @@
+<h2>افزودن کاربر جدید</h2>
+<form id="user-form">
+    <div class="form-group">
+        <label for="user-username">نام کاربری</label>
+        <input type="text" id="user-username" name="username" required>
+    </div>
+    <div class="form-group">
+        <label for="user-password">رمز عبور</label>
+        <input type="password" id="user-password" name="password" required>
+    </div>
+    <div class="form-group">
+        <label for="user-role">نقش</label>
+        <select id="user-role" name="role" required>
+            <!-- D_ROLE_OPTIONS -->
+        </select>
+    </div>
+
+    <div id="company-select-container">
+        <!-- D_COMPANY_SELECTOR -->
+    </div>
+
+    <button type="submit">ذخیره</button>
+    <button type="button" id="cancel-btn">انصراف</button>
+</form>

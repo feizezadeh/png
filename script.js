@@ -44,6 +44,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Template Loader ---
+    async function loadView(viewName, callback) {
+        try {
+            const response = await fetch(`views/${viewName}.html`);
+            if (!response.ok) {
+                throw new Error(`View not found: ${viewName}`);
+            }
+            const html = await response.text();
+            pageContent.innerHTML = html;
+            if (callback) {
+                callback();
+            }
+        } catch (error) {
+            console.error('View Loading Error:', error);
+            pageContent.innerHTML = `<h2>خطا در بارگذاری صفحه</h2><p>${error.message}</p>`;
+        }
+    }
+
     // --- Theme (Night Mode) ---
     function applyTheme(theme) {
         if (theme === 'dark') {
@@ -158,6 +176,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'users-management':
                 renderUsersManagement();
+                break;
+            case 'installer-dashboard':
+                renderInstallerDashboard();
                 break;
             default:
                 pageContent.innerHTML = '<h2>صفحه مورد نظر یافت نشد</h2>';
@@ -1001,160 +1022,110 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CRUD for Users (Super Admin) ---
 
     async function renderUsersManagement() {
-        // For now, only GET and POST (for super_admin) are implemented
-        const result = await fetchAPI('api/users.php');
-        if (!result || result.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا در بارگذاری کاربران</h2>';
-            return;
-        }
+        loadView('users_management', async () => {
+            const result = await fetchAPI('api/users.php');
+            if (!result || result.status !== 'success') {
+                pageContent.innerHTML = '<h2>خطا در بارگذاری کاربران</h2>';
+                return;
+            }
 
-        const users = result.data;
-        let tableRows = users.map(u => {
-            // Don't show edit/delete for the user themselves
-            const isCurrentUser = u.id == appState.currentUser.id;
-            const actions = isCurrentUser ? '' : `
-                <button class="btn-edit" data-id="${u.id}">ویرایش</button>
-                <button class="btn-delete danger" data-id="${u.id}">حذف</button>
-            `;
-            return `
-                <tr>
-                    <td>${u.username}</td>
-                    <td>${u.role}</td>
-                    <td>${u.company_name || '---'}</td>
-                    <td>${actions}</td>
-                </tr>
-            `;
-        }).join('');
+            const users = result.data;
+            const tableBody = document.getElementById('users-table-body');
+            const rowTemplate = document.getElementById('user-row-template');
+            tableBody.innerHTML = ''; // Clear previous content
 
-         pageContent.innerHTML = `
-            <h2>مدیریت کاربران</h2>
-            <button id="add-new-user-btn">افزودن کاربر جدید</button>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                        <th>نام کاربری</th>
-                        <th>نقش</th>
-                        <th>شرکت</th>
-                        <th>عملیات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
-        `;
+            users.forEach(user => {
+                const row = rowTemplate.content.cloneNode(true);
+                row.querySelector('[data-field="username"]').textContent = user.username;
+                row.querySelector('[data-field="role"]').textContent = user.role;
+                row.querySelector('[data-field="company_name"]').textContent = user.company_name || '---';
 
-        document.getElementById('add-new-user-btn').addEventListener('click', () => renderAddUserForm());
-        pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderEditUserForm(e.target.dataset.id)));
-        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteUser(e.target.dataset.id)));
+                const actionsCell = row.querySelector('[data-field="actions"]');
+                if (user.id != appState.currentUser.id) {
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'btn-edit';
+                    editBtn.textContent = 'ویرایش';
+                    editBtn.addEventListener('click', () => renderEditUserForm(user.id));
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'btn-delete danger';
+                    deleteBtn.textContent = 'حذف';
+                    deleteBtn.addEventListener('click', () => deleteUser(user.id));
+
+                    actionsCell.appendChild(editBtn);
+                    actionsCell.appendChild(deleteBtn);
+                }
+                tableBody.appendChild(row);
+            });
+
+            document.getElementById('add-new-user-btn').addEventListener('click', () => renderAddUserForm());
+        });
     }
 
     async function renderEditUserForm(id) {
-        const title = 'ویرایش کاربر';
-        const userRole = appState.currentUser.role;
+        loadView('edit_user_form', async () => {
+            const userRole = appState.currentUser.role;
 
-        // Fetch user data first
-        // Note: This API call is not scoped, but the backend will prevent fetching users from other companies.
-        const userResult = await fetchAPI(`api/users.php?id=${id}`);
-        if (!userResult || userResult.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا: کاربر یافت نشد.</h2>';
-            return;
-        }
-        const user = userResult.data;
+            const userResult = await fetchAPI(`api/users.php?id=${id}`);
+            if (!userResult || !userResult.data) {
+                pageContent.innerHTML = '<h2>خطا: کاربر یافت نشد.</h2>';
+                return;
+            }
+            const user = userResult.data;
 
-        let roleOptions = '';
-        if (userRole === 'super_admin') {
-            // A super admin can change a company admin's company, etc.
-            // Simplified for now: cannot change role or company in edit form.
-            roleOptions = `<option value="${user.role}" selected>${user.role}</option>`;
-        } else if (userRole === 'company_admin') {
-            roleOptions = `
-                <option value="installer" ${user.role === 'installer' ? 'selected' : ''}>نصاب</option>
-                <option value="support" ${user.role === 'support' ? 'selected' : ''}>پشتیبان</option>
-            `;
-        }
+            document.getElementById('edit-username').textContent = user.username;
+            document.getElementById('edit-user-id').value = user.id;
 
-        pageContent.innerHTML = `
-             <h2>${title}: ${user.username}</h2>
-            <form id="user-form">
-                <input type="hidden" name="id" value="${user.id}">
-                <div class="form-group">
-                    <label for="user-password">رمز عبور جدید (اختیاری)</label>
-                    <input type="password" id="user-password" name="password">
-                    <small>برای تغییر رمز عبور، مقدار جدید را وارد کنید. در غیر این صورت، خالی بگذارید.</small>
-                </div>
-                <div class="form-group">
-                    <label for="user-role">نقش</label>
-                    <select id="user-role" name="role" required>
-                        ${roleOptions}
-                    </select>
-                </div>
-                <button type="submit">ذخیره تغییرات</button>
-                <button type="button" id="cancel-btn">انصراف</button>
-            </form>
-        `;
+            let roleOptions = '';
+            if (userRole === 'super_admin') {
+                roleOptions = `<option value="${user.role}" selected>${user.role}</option>`;
+            } else if (userRole === 'company_admin') {
+                roleOptions = `
+                    <option value="installer" ${user.role === 'installer' ? 'selected' : ''}>نصاب</option>
+                    <option value="support" ${user.role === 'support' ? 'selected' : ''}>پشتیبان</option>
+                `;
+            }
+            const roleSelect = document.getElementById('user-role');
+            roleSelect.innerHTML = roleOptions;
 
-        document.getElementById('user-form').addEventListener('submit', saveUser);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
+            document.getElementById('user-form').addEventListener('submit', saveUser);
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
+        });
     }
 
     async function renderAddUserForm() {
-        const title = 'افزودن کاربر جدید';
-        const userRole = appState.currentUser.role;
-        let roleOptions = '';
-        let companySelector = '';
+        loadView('add_user_form', async () => {
+            const userRole = appState.currentUser.role;
+            let roleOptions = '';
 
-        if (userRole === 'super_admin') {
-            roleOptions = '<option value="company_admin">ادمین شرکت</option>';
-            const companiesResult = await fetchAPI('api/companies.php');
-            if (!companiesResult || companiesResult.status !== 'success') {
-                pageContent.innerHTML = '<h2>خطا: شرکت‌ها یافت نشدند.</h2>';
-                return;
+            if (userRole === 'super_admin') {
+                roleOptions = '<option value="company_admin">ادمین شرکت</option>';
+
+                const companiesResult = await fetchAPI('api/companies.php');
+                if (companiesResult && companiesResult.data) {
+                    const companiesOptions = companiesResult.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                    const companySelector = `
+                        <div class="form-group" id="company-select-group">
+                           <label for="user-company-id">شرکت</label>
+                           <select id="user-company-id" name="company_id" required>
+                               <option value="">انتخاب کنید...</option>
+                               ${companiesOptions}
+                           </select>
+                       </div>
+                    `;
+                    document.getElementById('company-select-container').innerHTML = companySelector;
+                }
+            } else if (userRole === 'company_admin') {
+                roleOptions = `
+                    <option value="installer">نصاب</option>
+                    <option value="support">پشتیبان</option>
+                `;
             }
-            const companiesOptions = companiesResult.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            companySelector = `
-                 <div class="form-group" id="company-select-group">
-                    <label for="user-company-id">شرکت</label>
-                    <select id="user-company-id" name="company_id" required>
-                        <option value="">انتخاب کنید...</option>
-                        ${companiesOptions}
-                    </select>
-                </div>
-            `;
-        } else if (userRole === 'company_admin') {
-            roleOptions = `
-                <option value="installer">نصاب</option>
-                <option value="support">پشتیبان</option>
-            `;
-            // Company selector is not needed, it's set automatically on backend
-        }
+            document.getElementById('user-role').innerHTML = roleOptions;
 
-        pageContent.innerHTML = `
-             <h2>${title}</h2>
-            <form id="user-form">
-                <div class="form-group">
-                    <label for="user-username">نام کاربری</label>
-                    <input type="text" id="user-username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="user-password">رمز عبور</label>
-                    <input type="password" id="user-password" name="password" required>
-                </div>
-                <div class="form-group">
-                    <label for="user-role">نقش</label>
-                    <select id="user-role" name="role" required>
-                        ${roleOptions}
-                    </select>
-                </div>
-                ${companySelector}
-                <button type="submit">ذخیره</button>
-                <button type="button" id="cancel-btn">انصراف</button>
-            </form>
-        `;
-
-        document.getElementById('user-form').addEventListener('submit', saveUser);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
+            document.getElementById('user-form').addEventListener('submit', saveUser);
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
+        });
     }
 
     async function saveUser(e) {
@@ -1188,6 +1159,118 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+
+    // --- Installer UI ---
+
+    async function renderInstallerDashboard() {
+        pageContent.innerHTML = `<h2>داشبورد نصاب</h2><p>در حال بارگذاری کارهای شما...</p>`;
+        const result = await fetchAPI('api/assignments.php'); // GET request by default
+
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری لیست کارها</h2>';
+            return;
+        }
+
+        const assignments = result.data;
+        if (assignments.length === 0) {
+            pageContent.innerHTML = '<h2>داشبورد نصاب</h2><p>در حال حاضر هیچ کاری به شما ارجاع داده نشده است.</p>';
+            return;
+        }
+
+        let tableRows = assignments.map(a => {
+            const status_text = a.installation_status === 'completed'
+                ? '<span style="color:green;">تکمیل شده</span>'
+                : '<span style="color:orange;">در انتظار انجام</span>';
+            const report_button = a.installation_status !== 'completed'
+                ? `<button class="btn-report" data-id="${a.id}">ثبت گزارش</button>`
+                : 'گزارش ثبت شده';
+            return `
+                <tr>
+                    <td>${a.subscriber_name}</td>
+                    <td>${a.fat_number}</td>
+                    <td>${a.address || 'ثبت نشده'}</td>
+                    <td>${status_text}</td>
+                    <td>${report_button}</td>
+                </tr>
+            `;
+        }).join('');
+
+        pageContent.innerHTML = `
+            <h2>کارهای ارجاع شده به شما</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>نام مشترک</th>
+                            <th>شماره FAT</th>
+                            <th>آدرس</th>
+                            <th>وضعیت</th>
+                            <th>عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        pageContent.querySelectorAll('.btn-report').forEach(btn => btn.addEventListener('click', (e) => renderInstallationReportForm(e.target.dataset.id)));
+    }
+
+    function renderInstallationReportForm(subscription_id) {
+        pageContent.innerHTML = `
+            <h2>ثبت گزارش نصب برای اشتراک #${subscription_id}</h2>
+            <form id="installation-report-form">
+                <input type="hidden" name="type" value="installation">
+                <input type="hidden" name="target_id" value="${subscription_id}">
+                <div class="form-group">
+                    <label for="cable-length">متراژ کابل مصرفی (متر)</label>
+                    <input type="number" id="cable-length" name="cable_length" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="cable-type">نوع کابل مصرفی</label>
+                    <input type="text" id="cable-type" name="cable_type" placeholder="مثال: 2-core indoor">
+                </div>
+                <div class="form-group">
+                    <label>لوازم مصرفی دیگر (JSON)</label>
+                    <textarea name="materials_used" rows="4" placeholder='[{"item": "fast connector", "quantity": 2}, {"item": "pigtail", "quantity": 1}]'></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="notes">توضیحات</label>
+                    <textarea id="notes" name="notes" rows="4"></textarea>
+                </div>
+                <button type="submit">ثبت گزارش</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+        document.getElementById('installation-report-form').addEventListener('submit', saveInstallationReport);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('installer-dashboard'));
+    }
+
+    async function saveInstallationReport(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // Validate and parse JSON
+        try {
+            if (data.materials_used) {
+                data.materials_used = JSON.parse(data.materials_used);
+            }
+        } catch (error) {
+            alert('فرمت JSON برای لوازم مصرفی نامعتبر است.');
+            return;
+        }
+
+        const result = await fetchAPI('api/workflow_reports.php', { method: 'POST', body: data });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('installer-dashboard');
+        }
+    }
 
     // --- Initial Check ---
     // A simple check to see if a session is active.

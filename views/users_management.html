@@ -1,0 +1,27 @@
+<h2>مدیریت کاربران</h2>
+<button id="add-new-user-btn">افزودن کاربر جدید</button>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>نام کاربری</th>
+                <th>نقش</th>
+                <th>شرکت</th>
+                <th>عملیات</th>
+            </tr>
+        </thead>
+        <tbody id="users-table-body">
+            <!-- User rows will be injected here by JavaScript -->
+        </tbody>
+    </table>
+</div>
+
+<!-- A template for each table row -->
+<template id="user-row-template">
+    <tr>
+        <td data-field="username"></td>
+        <td data-field="role"></td>
+        <td data-field="company_name"></td>
+        <td data-field="actions"></td>
+    </tr>
+</template>
