@@ -31,7 +31,7 @@
     <main id="main-content">
         <!-- Login Form Container -->
         <div id="login-container" class="container">
-            <form id="login-form">
+            <form id="login-form" method="POST">
                 <h2>ورود به سیستم</h2>
                 <div class="form-group">
                     <label for="username">نام کاربری</label>
