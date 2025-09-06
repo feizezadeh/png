@@ -776,47 +776,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
-            const position = marker.getLatLng();
-            document.getElementById('latitude').value = position.lat;
-            document.getElementById('longitude').value = position.lng;
-        });
-
-        map.on('click', function(e) {
-            marker.setLatLng(e.latlng);
-            document.getElementById('latitude').value = e.latlng.lat;
-            document.getElementById('longitude').value = e.latlng.lng;
-        });
-    }
-
-    async function saveFat(e) {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        const endpoint = data.id ? `api/fats.php` : 'api/fats.php';
-        const method = data.id ? 'PUT' : 'POST';
-
-        const result = await fetchAPI(endpoint, {
-            method: method,
-            body: data
-        });
-
-        if (result && result.status === 'success') {
-            alert(result.message);
-            navigateTo('fats-management');
-        }
-    }
-
-    async function deleteFat(id) {
-        if (confirm('آیا از حذف این FAT و تمام اشتراک‌های مرتبط با آن مطمئن هستید؟')) {
-            const result = await fetchAPI(`api/fats.php?id=${id}`, { method: 'DELETE' });
-             if (result && result.status === 'success') {
-                alert(result.message);
-                navigateTo('fats-management');
-            }
-        }
-    }
 
     // --- Reporting ---
 
