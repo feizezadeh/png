@@ -5,8 +5,8 @@ header('Content-Type: application/json; charset=utf-8');
 require_once '../config/config.php';
 require_once '../includes/check_permission.php';
 
-// دسترسی: ادمین و پشتیبانی
-secure_api_endpoint(['admin', 'support']);
+// دسترسی: ادمین کل و ادمین شرکت
+secure_api_endpoint(['super_admin', 'company_admin']);
 
 $method = $_SERVER['REQUEST_METHOD'];
 

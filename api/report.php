@@ -4,8 +4,8 @@
 require_once '../config/config.php';
 require_once '../includes/check_permission.php';
 
-// این صفحه فقط برای کاربران با نقش ادمین یا پشتیبانی قابل دسترسی است
-secure_api_endpoint(['admin', 'support']);
+// این صفحه فقط برای کاربران با نقش ادمین قابل دسترسی است
+secure_api_endpoint(['super_admin', 'company_admin']);
 
 // دریافت پارامترهای فیلتر از درخواست GET
 $fat_id = filter_input(INPUT_GET, 'fat_id', FILTER_VALIDATE_INT);
