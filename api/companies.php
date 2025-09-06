@@ -4,6 +4,7 @@
 header('Content-Type: application/json; charset=utf-8');
 require_once '../config/config.php';
 require_once '../includes/check_permission.php';
+require_once '../includes/jdf.php';
 
 // این صفحه فقط برای ادمین کل قابل دسترسی است
 secure_api_endpoint('super_admin');
@@ -63,7 +64,14 @@ function handle_post_companies($pdo) {
 
         $expires_at = !empty($data['expires_at']) ? $data['expires_at'] : null;
         if ($expires_at) {
-            $expires_at = str_replace('/', '-', $expires_at);
+            $date_parts = preg_split('/[-\/]/', $expires_at);
+            if (count($date_parts) === 3) {
+                list($jy, $jm, $jd) = $date_parts;
+                list($gy, $gm, $gd) = jalali_to_gregorian((int)$jy, (int)$jm, (int)$jd);
+                $expires_at = sprintf('%04d-%02d-%02d', $gy, $gm, $gd);
+            } else {
+                $expires_at = null; // Invalidate if format is wrong
+            }
         }
         $stmt->execute([htmlspecialchars(strip_tags($data['name'])), $expires_at]);
 
@@ -102,7 +110,14 @@ function handle_put_companies($pdo) {
 
         $expires_at = !empty($data['expires_at']) ? $data['expires_at'] : null;
         if ($expires_at) {
-            $expires_at = str_replace('/', '-', $expires_at);
+            $date_parts = preg_split('/[-\/]/', $expires_at);
+            if (count($date_parts) === 3) {
+                list($jy, $jm, $jd) = $date_parts;
+                list($gy, $gm, $gd) = jalali_to_gregorian((int)$jy, (int)$jm, (int)$jd);
+                $expires_at = sprintf('%04d-%02d-%02d', $gy, $gm, $gd);
+            } else {
+                $expires_at = null; // Invalidate if format is wrong
+            }
         }
         $stmt->execute([htmlspecialchars(strip_tags($data['name'])), $expires_at, $data['id']]);
 
