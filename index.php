@@ -50,23 +50,23 @@
         <div id="dashboard-container" class="container" style="display: none;">
             <!-- Tile Menu -->
             <div id="tile-menu">
-                <div class="tile" data-target="fats-management">
+                <div class="tile" data-target="fats-management" data-role="super_admin company_admin">
                     <i class="fa-solid fa-network-wired fa-3x"></i>
                     <span>مدیریت FAT ها</span>
                 </div>
-                <div class="tile" data-target="subscribers-management">
+                <div class="tile" data-target="subscribers-management" data-role="super_admin company_admin support">
                     <i class="fa-solid fa-users fa-3x"></i>
                     <span>مدیریت مشترکین</span>
                 </div>
-                <div class="tile" data-target="subscriptions-management">
+                <div class="tile" data-target="subscriptions-management" data-role="super_admin company_admin support">
                     <i class="fa-solid fa-file-signature fa-3x"></i>
                     <span>مدیریت اشتراک‌ها</span>
                 </div>
-                <div class="tile" data-target="reports-management">
+                <div class="tile" data-target="reports-management" data-role="super_admin company_admin">
                     <i class="fa-solid fa-chart-line fa-3x"></i>
                     <span>گزارش‌گیری</span>
                 </div>
-                 <div class="tile" data-target="telecom-centers-management">
+                 <div class="tile" data-target="telecom-centers-management" data-role="super_admin company_admin">
                     <i class="fa-solid fa-building-columns fa-3x"></i>
                     <span>مراکز مخابراتی</span>
                 </div>

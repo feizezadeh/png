@@ -76,7 +76,7 @@ function handle_get_assignments($pdo, $user_role, $user_id) {
 }
 
 function handle_post_assignments($pdo, $user_role, $user_company_id) {
-    if ($user_role !== 'company_admin') {
+    if (!in_array($user_role, ['super_admin', 'company_admin'])) {
         header('HTTP/1.1 403 Forbidden');
         echo json_encode(['status' => 'error', 'message' => 'شما اجازه ارجاع کار را ندارید.']);
         return;
@@ -90,46 +90,48 @@ function handle_post_assignments($pdo, $user_role, $user_company_id) {
     }
 
     try {
-        // --- Security Check: Ensure the admin is not assigning tasks outside their company ---
-        // 1. Check if the user being assigned to belongs to the admin's company
-        $stmt = $pdo->prepare("SELECT company_id FROM users WHERE id = ?");
-        $stmt->execute([$data['user_id']]);
-        $target_user = $stmt->fetch();
-        if (!$target_user || $target_user['company_id'] != $user_company_id) {
-            header('HTTP/1.1 403 Forbidden');
-            echo json_encode(['status' => 'error', 'message' => 'کاربر انتخاب شده متعلق به شرکت شما نیست.']);
-            return;
-        }
-
-        // 2. Assign based on type
-        if ($data['type'] === 'installation') {
-            // Check if the subscription belongs to the admin's company
-            $stmt = $pdo->prepare("SELECT f.company_id FROM subscriptions sub JOIN fats f ON sub.fat_id = f.id WHERE sub.id = ?");
-            $stmt->execute([$data['target_id']]);
-            $subscription_owner = $stmt->fetch();
-            if (!$subscription_owner || $subscription_owner['company_id'] != $user_company_id) {
+        // --- Security Check for company_admin ---
+        if ($user_role === 'company_admin') {
+            // 1. Check if the user being assigned to belongs to the admin's company
+            $stmt = $pdo->prepare("SELECT company_id FROM users WHERE id = ?");
+            $stmt->execute([$data['user_id']]);
+            $target_user = $stmt->fetch();
+            if (!$target_user || $target_user['company_id'] != $user_company_id) {
                 header('HTTP/1.1 403 Forbidden');
-                echo json_encode(['status' => 'error', 'message' => 'اشتراک انتخاب شده متعلق به شرکت شما نیست.']);
+                echo json_encode(['status' => 'error', 'message' => 'کاربر انتخاب شده متعلق به شرکت شما نیست.']);
                 return;
             }
 
-            // Perform the assignment
+            // 2. Check if the target resource belongs to the admin's company
+            if ($data['type'] === 'installation') {
+                $stmt = $pdo->prepare("SELECT f.company_id FROM subscriptions sub JOIN fats f ON sub.fat_id = f.id WHERE sub.id = ?");
+                $stmt->execute([$data['target_id']]);
+                $subscription_owner = $stmt->fetch();
+                if (!$subscription_owner || $subscription_owner['company_id'] != $user_company_id) {
+                    header('HTTP/1.1 403 Forbidden');
+                    echo json_encode(['status' => 'error', 'message' => 'اشتراک انتخاب شده متعلق به شرکت شما نیست.']);
+                    return;
+                }
+            } elseif ($data['type'] === 'support') {
+                $stmt = $pdo->prepare("SELECT company_id FROM support_tickets WHERE id = ?");
+                $stmt->execute([$data['target_id']]);
+                $ticket_owner = $stmt->fetch();
+                if (!$ticket_owner || $ticket_owner['company_id'] != $user_company_id) {
+                    header('HTTP/1.1 403 Forbidden');
+                    echo json_encode(['status' => 'error', 'message' => 'تیکت انتخاب شده متعلق به شرکت شما نیست.']);
+                    return;
+                }
+            }
+        }
+        // --- End Security Check ---
+
+        // Assign based on type
+        if ($data['type'] === 'installation') {
             $sql = "UPDATE subscriptions SET assigned_installer_id = ?, installation_status = 'assigned' WHERE id = ?";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$data['user_id'], $data['target_id']]);
             echo json_encode(['status' => 'success', 'message' => 'نصب با موفقیت به نصاب ارجاع داده شد.']);
         } elseif ($data['type'] === 'support') {
-            // Check if the ticket belongs to the admin's company
-            $stmt = $pdo->prepare("SELECT company_id FROM support_tickets WHERE id = ?");
-            $stmt->execute([$data['target_id']]);
-            $ticket_owner = $stmt->fetch();
-            if (!$ticket_owner || $ticket_owner['company_id'] != $user_company_id) {
-                header('HTTP/1.1 403 Forbidden');
-                echo json_encode(['status' => 'error', 'message' => 'تیکت انتخاب شده متعلق به شرکت شما نیست.']);
-                return;
-            }
-
-            // Perform the assignment
             $sql = "UPDATE support_tickets SET assigned_support_id = ?, status = 'assigned' WHERE id = ?";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$data['user_id'], $data['target_id']]);

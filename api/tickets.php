@@ -25,13 +25,13 @@ switch ($method) {
         handle_get_tickets($pdo, $user_role, $user_company_id);
         break;
     case 'POST':
-        // Only company_admin can create tickets
-        if ($user_role !== 'company_admin') {
+        // Only admins can create tickets
+        if (!in_array($user_role, ['super_admin', 'company_admin'])) {
             header('HTTP/1.1 403 Forbidden');
             echo json_encode(['status' => 'error', 'message' => 'شما اجازه ساخت تیکت جدید را ندارید.']);
             exit;
         }
-        handle_post_ticket($pdo, $user_id, $user_company_id);
+        handle_post_ticket($pdo, $user_role, $user_id, $user_company_id);
         break;
     default:
         header('HTTP/1.1 405 Method Not Allowed');
@@ -107,7 +107,7 @@ function handle_get_tickets($pdo, $user_role, $user_company_id) {
     }
 }
 
-function handle_post_ticket($pdo, $user_id, $user_company_id) {
+function handle_post_ticket($pdo, $user_role, $user_id, $user_company_id) {
     $data = json_decode(file_get_contents('php://input'), true);
 
     if (empty($data['subscription_id']) || empty($data['title']) || empty($data['description'])) {
@@ -117,16 +117,26 @@ function handle_post_ticket($pdo, $user_id, $user_company_id) {
     }
 
     try {
-        // --- Security Check: Ensure the subscription belongs to the admin's company ---
+        // --- Get subscription's company and check permissions ---
         $stmt = $pdo->prepare("SELECT f.company_id FROM subscriptions sub JOIN fats f ON sub.fat_id = f.id WHERE sub.id = ?");
         $stmt->execute([$data['subscription_id']]);
         $subscription_owner = $stmt->fetch();
 
-        if (!$subscription_owner || $subscription_owner['company_id'] != $user_company_id) {
+        if (!$subscription_owner) {
+            header('HTTP/1.1 404 Not Found');
+            echo json_encode(['status' => 'error', 'message' => 'اشتراک مورد نظر یافت نشد.']);
+            return;
+        }
+
+        $ticket_company_id = $subscription_owner['company_id'];
+
+        // If user is a company_admin, they can only create tickets for their own company's subscriptions.
+        if ($user_role === 'company_admin' && $ticket_company_id != $user_company_id) {
             header('HTTP/1.1 403 Forbidden');
             echo json_encode(['status' => 'error', 'message' => 'اشتراک انتخاب شده متعلق به شرکت شما نیست.']);
             return;
         }
+        // Super admin can create for any company.
 
         $sql = "
             INSERT INTO support_tickets
@@ -136,7 +146,7 @@ function handle_post_ticket($pdo, $user_id, $user_company_id) {
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             $data['subscription_id'],
-            $user_company_id,
+            $ticket_company_id, // Use the company_id from the subscription itself
             htmlspecialchars(strip_tags($data['title'])),
             htmlspecialchars(strip_tags($data['description'])),
             $user_id
