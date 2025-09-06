@@ -70,9 +70,51 @@ function handle_post_report($pdo, $user_role, $user_id) {
             header('HTTP/1.1 201 Created');
             echo json_encode(['status' => 'success', 'message' => 'گزارش نصب با موفقیت ثبت شد.']);
 
-        }
-        // elseif ($data['type'] === 'support' && $user_role === 'support') { ... } // To be implemented
-        else {
+        } elseif ($data['type'] === 'support' && $user_role === 'support') {
+            // --- Validation ---
+            if (empty($data['status']) || empty($data['notes'])) {
+                header('HTTP/1.1 400 Bad Request');
+                echo json_encode(['status' => 'error', 'message' => 'وضعیت جدید و توضیحات گزارش الزامی است.']);
+                return;
+            }
+            $allowed_statuses = ['resolved', 'needs_investigation', 'needs_recabling'];
+            if (!in_array($data['status'], $allowed_statuses)) {
+                header('HTTP/1.1 400 Bad Request');
+                echo json_encode(['status' => 'error', 'message' => 'وضعیت انتخاب شده نامعتبر است.']);
+                return;
+            }
+
+            // --- Authorization Check ---
+            $stmt = $pdo->prepare("SELECT id FROM support_tickets WHERE id = ? AND assigned_support_id = ?");
+            $stmt->execute([$data['target_id'], $user_id]);
+            if (!$stmt->fetch()) {
+                header('HTTP/1.1 403 Forbidden');
+                echo json_encode(['status' => 'error', 'message' => 'این تیکت به شما ارجاع داده نشده است.']);
+                return;
+            }
+
+            // --- Insert Report ---
+            $sql = "
+                INSERT INTO support_reports (ticket_id, support_id, notes, materials_used)
+                VALUES (?, ?, ?, ?)
+            ";
+            $stmt = $pdo->prepare($sql);
+            $materials_used = isset($data['materials_used']) ? json_encode($data['materials_used']) : null;
+            $stmt->execute([
+                $data['target_id'],
+                $user_id,
+                htmlspecialchars(strip_tags($data['notes'])),
+                $materials_used
+            ]);
+
+            // --- Update Ticket Status ---
+            $stmt = $pdo->prepare("UPDATE support_tickets SET status = ? WHERE id = ?");
+            $stmt->execute([$data['status'], $data['target_id']]);
+
+            header('HTTP/1.1 201 Created');
+            echo json_encode(['status' => 'success', 'message' => 'گزارش پشتیبانی با موفقیت ثبت شد.']);
+
+        } else {
             header('HTTP/1.1 403 Forbidden');
             echo json_encode(['status' => 'error', 'message' => 'شما اجازه ثبت این نوع گزارش را ندارید.']);
         }
