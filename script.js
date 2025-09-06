@@ -177,8 +177,14 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'users-management':
                 renderUsersManagement();
                 break;
+            case 'tickets-management':
+                renderTicketsManagement();
+                break;
             case 'installer-dashboard':
                 renderInstallerDashboard();
+                break;
+            case 'support-dashboard':
+                renderSupportDashboard();
                 break;
             default:
                 pageContent.innerHTML = '<h2>صفحه مورد نظر یافت نشد</h2>';
@@ -295,6 +301,276 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(result.message);
                 navigateTo('telecom-centers-management');
             }
+        }
+    }
+
+    // --- Support Ticket Creation ---
+
+    function renderCreateTicketForm(subscription_id) {
+        pageContent.innerHTML = `
+            <h2>ایجاد تیکت پشتیبانی برای اشتراک #${subscription_id}</h2>
+            <form id="create-ticket-form">
+                <input type="hidden" name="subscription_id" value="${subscription_id}">
+                <div class="form-group">
+                    <label for="ticket-title">عنوان تیکت</label>
+                    <input type="text" id="ticket-title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="ticket-description">شرح مشکل</label>
+                    <textarea id="ticket-description" name="description" rows="5" required></textarea>
+                </div>
+                <button type="submit">ایجاد تیکت</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+        document.getElementById('create-ticket-form').addEventListener('submit', saveTicket);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscriptions-management'));
+    }
+
+    async function saveTicket(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const result = await fetchAPI('api/tickets.php', {
+            method: 'POST',
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('tickets-management');
+        }
+    }
+
+    // --- Support UI ---
+
+    async function renderSupportDashboard() {
+        pageContent.innerHTML = `<h2>داشبورد پشتیبانی</h2><p>در حال بارگذاری تیکت‌های شما...</p>`;
+        const result = await fetchAPI('api/assignments.php'); // GET request will be filtered by role on backend
+
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری لیست کارها</h2>';
+            return;
+        }
+
+        const tickets = result.data;
+        if (tickets.length === 0) {
+            pageContent.innerHTML = '<h2>داشبورد پشتیبانی</h2><p>در حال حاضر هیچ تیکتی به شما ارجاع داده نشده است.</p>';
+            return;
+        }
+
+        let tableRows = tickets.map(t => {
+            const is_resolved = t.status === 'resolved';
+            const report_button = !is_resolved
+                ? `<button class="btn-report" data-id="${t.id}">ثبت گزارش و تغییر وضعیت</button>`
+                : 'گزارش ثبت شده';
+            return `
+                <tr>
+                    <td>${t.id}</td>
+                    <td>${t.title}</td>
+                    <td>${t.subscriber_name}</td>
+                    <td><span class="status-${t.status}">${t.status}</span></td>
+                    <td>${report_button}</td>
+                </tr>
+            `;
+        }).join('');
+
+        pageContent.innerHTML = `
+            <h2>تیکت‌های ارجاع شده به شما</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>شناسه تیکت</th>
+                            <th>عنوان</th>
+                            <th>نام مشترک</th>
+                            <th>وضعیت</th>
+                            <th>عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        pageContent.querySelectorAll('.btn-report').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticketId = e.currentTarget.dataset.id;
+                renderTicketUpdateForm(ticketId);
+            });
+        });
+    }
+
+    function renderTicketUpdateForm(ticket_id) {
+        pageContent.innerHTML = `
+            <h2>ثبت گزارش برای تیکت #${ticket_id}</h2>
+            <form id="support-report-form">
+                <input type="hidden" name="type" value="support">
+                <input type="hidden" name="target_id" value="${ticket_id}">
+
+                <div class="form-group">
+                    <label for="ticket-status">تغییر وضعیت به:</label>
+                    <select id="ticket-status" name="status" required>
+                        <option value="resolved">حل شده</option>
+                        <option value="needs_investigation">نیاز به بررسی بیشتر</option>
+                        <option value="needs_recabling">نیاز به کابل‌کشی مجدد</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">گزارش اقدامات و توضیحات</label>
+                    <textarea id="notes" name="notes" rows="5" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>لوازم مصرفی (اختیاری - فرمت JSON)</label>
+                    <textarea name="materials_used" rows="3" placeholder='[{"item": "patch cord", "quantity": 1}]'></textarea>
+                </div>
+
+                <button type="submit">ثبت گزارش</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+        document.getElementById('support-report-form').addEventListener('submit', saveSupportReport);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('support-dashboard'));
+    }
+
+    async function saveSupportReport(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // Validate and parse JSON
+        try {
+            if (data.materials_used.trim()) {
+                data.materials_used = JSON.parse(data.materials_used);
+            } else {
+                delete data.materials_used; // Remove if empty
+            }
+        } catch (error) {
+            alert('فرمت JSON برای لوازم مصرفی نامعتبر است.');
+            return;
+        }
+
+        const result = await fetchAPI('api/workflow_reports.php', { method: 'POST', body: data });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('support-dashboard');
+        }
+    }
+
+    // --- Ticket Management (Company Admin) ---
+
+    async function renderTicketsManagement() {
+        const result = await fetchAPI('api/tickets.php');
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری تیکت‌ها</h2>';
+            return;
+        }
+
+        const tickets = result.data;
+        let tableRows = tickets.map(ticket => {
+            let actions = '';
+            if (ticket.status === 'open') {
+                actions = `<button class="btn-refer" data-id="${ticket.id}">ارجاع به پشتیبان</button>`;
+            } else {
+                actions = `ارجاع شده به ${ticket.assigned_to || 'N/A'}`;
+            }
+
+            return `
+                <tr>
+                    <td>${ticket.id}</td>
+                    <td>${ticket.title}</td>
+                    <td>${ticket.subscriber_name}</td>
+                    <td><span class="status-${ticket.status}">${ticket.status}</span></td>
+                    <td>${new Date(ticket.created_at).toLocaleDateString('fa-IR')}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        }).join('');
+
+        pageContent.innerHTML = `
+            <h2>مدیریت تیکت‌های پشتیبانی</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>شناسه</th>
+                            <th>عنوان</th>
+                            <th>مشترک</th>
+                            <th>وضعیت</th>
+                            <th>تاریخ ایجاد</th>
+                            <th>عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        pageContent.querySelectorAll('.btn-refer').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticketId = e.currentTarget.dataset.id;
+                renderReferTicketForm(ticketId);
+            });
+        });
+    }
+
+    async function renderReferTicketForm(ticketId) {
+        pageContent.innerHTML = `<h2>ارجاع تیکت #${ticketId}</h2><p>در حال بارگذاری فرم...</p>`;
+
+        const usersResult = await fetchAPI('api/users.php?role=support');
+        if (!usersResult || usersResult.status !== 'success' || usersResult.data.length === 0) {
+            pageContent.innerHTML = '<h2>خطا: هیچ کاربر پشتیبانی در شرکت شما یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>';
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tickets-management'));
+            return;
+        }
+
+        const supportUsersOptions = usersResult.data.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
+
+        pageContent.innerHTML = `
+            <h2>ارجاع تیکت #${ticketId}</h2>
+            <form id="refer-ticket-form">
+                <input type="hidden" name="target_id" value="${ticketId}">
+                <input type="hidden" name="type" value="support">
+                <div class="form-group">
+                    <label for="support-user-id">کاربر پشتیبان</label>
+                    <select id="support-user-id" name="user_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${supportUsersOptions}
+                    </select>
+                </div>
+                <button type="submit">ارجاع</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+
+        document.getElementById('refer-ticket-form').addEventListener('submit', assignTicket);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tickets-management'));
+    }
+
+    async function assignTicket(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const result = await fetchAPI('api/assignments.php', {
+            method: 'POST',
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('tickets-management');
         }
     }
 
@@ -783,7 +1059,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${sub.virtual_subscriber_number}</td>
                 <td>${sub.is_active ? '<span style="color:green;">فعال</span>' : '<span style="color:red;">غیرفعال</span>'}</td>
                 <td>
-                    <button class="btn-delete danger" data-id="${sub.id}">حذف</button>
+                    <button class="btn-support" data-id="${sub.id}" title="ایجاد تیکت پشتیبانی"><i class="fa-solid fa-headset"></i></button>
+                    <button class="btn-delete danger" data-id="${sub.id}" title="حذف اشتراک"><i class="fa-solid fa-trash"></i></button>
                 </td>
             </tr>
         `).join('');
@@ -810,7 +1087,20 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         document.getElementById('add-new-subscription-btn').addEventListener('click', () => renderAddEditSubscriptionForm());
-        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteSubscription(e.target.dataset.id)));
+
+        pageContent.querySelectorAll('.btn-support').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const subId = e.currentTarget.dataset.id;
+                renderCreateTicketForm(subId);
+            });
+        });
+
+        pageContent.querySelectorAll('.btn-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const subId = e.currentTarget.dataset.id;
+                deleteSubscription(subId);
+            });
+        });
     }
 
     async function renderAddEditSubscriptionForm(id = null) {

@@ -49,8 +49,21 @@ function handle_get_assignments($pdo, $user_role, $user_id) {
             echo json_encode(['status' => 'success', 'data' => $assignments]);
         } elseif ($user_role === 'support') {
             // Logic for support users to get their tickets
-            // To be fully implemented in the next phase
-            echo json_encode(['status' => 'success', 'data' => []]); // Placeholder
+            $query = "
+                SELECT
+                    st.id, st.title, st.status, st.created_at,
+                    s.full_name as subscriber_name,
+                    sub.virtual_subscriber_number
+                FROM support_tickets st
+                JOIN subscriptions sub ON st.subscription_id = sub.id
+                JOIN subscribers s ON sub.subscriber_id = s.id
+                WHERE st.assigned_support_id = ?
+                ORDER BY st.updated_at DESC
+            ";
+            $stmt = $pdo->prepare($query);
+            $stmt->execute([$user_id]);
+            $assignments = $stmt->fetchAll();
+            echo json_encode(['status' => 'success', 'data' => $assignments]);
         } else {
             header('HTTP/1.1 403 Forbidden');
             echo json_encode(['status' => 'error', 'message' => 'نقش شما برای دریافت لیست کارها مجاز نیست.']);
@@ -105,9 +118,23 @@ function handle_post_assignments($pdo, $user_role, $user_company_id) {
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$data['user_id'], $data['target_id']]);
             echo json_encode(['status' => 'success', 'message' => 'نصب با موفقیت به نصاب ارجاع داده شد.']);
-        }
-        // elseif ($data['type'] === 'support') { ... } // To be implemented
-        else {
+        } elseif ($data['type'] === 'support') {
+            // Check if the ticket belongs to the admin's company
+            $stmt = $pdo->prepare("SELECT company_id FROM support_tickets WHERE id = ?");
+            $stmt->execute([$data['target_id']]);
+            $ticket_owner = $stmt->fetch();
+            if (!$ticket_owner || $ticket_owner['company_id'] != $user_company_id) {
+                header('HTTP/1.1 403 Forbidden');
+                echo json_encode(['status' => 'error', 'message' => 'تیکت انتخاب شده متعلق به شرکت شما نیست.']);
+                return;
+            }
+
+            // Perform the assignment
+            $sql = "UPDATE support_tickets SET assigned_support_id = ?, status = 'assigned' WHERE id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$data['user_id'], $data['target_id']]);
+            echo json_encode(['status' => 'success', 'message' => 'تیکت با موفقیت به پشتیبان ارجاع داده شد.']);
+        } else {
             header('HTTP/1.1 400 Bad Request');
             echo json_encode(['status' => 'error', 'message' => 'نوع ارجاع نامعتبر است.']);
         }
