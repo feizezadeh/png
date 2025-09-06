@@ -8,6 +8,21 @@ document.addEventListener('DOMContentLoaded', () => {
         dataCache: {},
     };
 
+    const statusTranslations = {
+        open: 'باز',
+        assigned: 'ارجاع شده',
+        resolved: 'حل شده',
+        needs_investigation: 'نیاز به بررسی',
+        needs_recabling: 'نیاز به کابل‌کشی مجدد',
+        pending: 'در انتظار نصب',
+        completed: 'تکمیل شده'
+    };
+
+    const activeStatusTranslations = {
+        true: 'فعال',
+        false: 'غیرفعال'
+    };
+
     // --- Element Selectors ---
     const mainContent = document.getElementById('main-content');
     const loginContainer = document.getElementById('login-container');
@@ -183,6 +198,9 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'installer-dashboard':
                 renderInstallerDashboard();
                 break;
+            case 'support-dashboard':
+                renderSupportDashboard();
+                break;
             default:
                 pageContent.innerHTML = '<h2>صفحه مورد نظر یافت نشد</h2>';
         }
@@ -300,6 +318,274 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
+
+    // --- Support Ticket Creation ---
+
+    function renderCreateTicketForm(subscription_id) {
+        pageContent.innerHTML = `
+            <h2>ایجاد تیکت پشتیبانی برای اشتراک #${subscription_id}</h2>
+            <form id="create-ticket-form">
+                <input type="hidden" name="subscription_id" value="${subscription_id}">
+                <div class="form-group">
+                    <label for="ticket-title">عنوان تیکت</label>
+                    <input type="text" id="ticket-title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="ticket-description">شرح مشکل</label>
+                    <textarea id="ticket-description" name="description" rows="5" required></textarea>
+                </div>
+                <button type="submit">ایجاد تیکت</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+        document.getElementById('create-ticket-form').addEventListener('submit', saveTicket);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscriptions-management'));
+    }
+
+    async function saveTicket(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const result = await fetchAPI('api/tickets.php', {
+            method: 'POST',
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('tickets-management');
+        }
+    }
+
+    async function deleteTicket(ticketId) {
+        if (confirm(`آیا از حذف تیکت شماره ${ticketId} مطمئن هستید؟`)) {
+            const result = await fetchAPI(`api/tickets.php?id=${ticketId}`, { method: 'DELETE' });
+            if (result && result.status === 'success') {
+                alert(result.message);
+                navigateTo('tickets-management');
+            }
+        }
+    }
+
+    async function renderEditTicketForm(ticketId) {
+        const result = await fetchAPI(`api/tickets.php?id=${ticketId}`);
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در دریافت اطلاعات تیکت.</h2>';
+            return;
+        }
+        const ticket = result.data;
+
+        pageContent.innerHTML = `
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست تیکت‌ها"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ویرایش تیکت #${ticket.id}</h2>
+            </div>
+            <form id="edit-ticket-form">
+                <input type="hidden" name="id" value="${ticket.id}">
+                <div class="form-group">
+                    <label for="ticket-title">عنوان تیکت</label>
+                    <input type="text" id="ticket-title" name="title" value="${ticket.title}" required>
+                </div>
+                <div class="form-group">
+                    <label for="ticket-description">شرح مشکل</label>
+                    <textarea id="ticket-description" name="description" rows="5" required>${ticket.issue_description}</textarea>
+                </div>
+                <button type="submit">ذخیره تغییرات</button>
+            </form>
+        `;
+
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('tickets-management'));
+        document.getElementById('edit-ticket-form').addEventListener('submit', updateTicket);
+    }
+
+    async function updateTicket(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const result = await fetchAPI('api/tickets.php', {
+            method: 'PUT',
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('tickets-management');
+        }
+    }
+
+    // --- Support UI ---
+
+    async function renderSupportDashboard() {
+        pageContent.innerHTML = `<h2>داشبورد پشتیبانی</h2><p>در حال بارگذاری تیکت‌های شما...</p>`;
+        const result = await fetchAPI('api/assignments.php'); // GET request will be filtered by role on backend
+
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری لیست کارها</h2>';
+            return;
+        }
+
+        const tickets = result.data;
+        if (tickets.length === 0) {
+            pageContent.innerHTML = '<h2>داشبورد پشتیبانی</h2><p>در حال حاضر هیچ تیکتی به شما ارجاع داده نشده است.</p>';
+            return;
+        }
+
+        let tableRows = tickets.map(t => {
+            const is_resolved = t.status === 'resolved';
+            const report_button = !is_resolved
+                ? `<button class="btn-report" data-id="${t.id}">ثبت گزارش و تغییر وضعیت</button>`
+                : 'گزارش ثبت شده';
+            return `
+                <tr>
+                    <td>${t.id}</td>
+                    <td>${t.title}</td>
+                    <td>${t.subscriber_name}</td>
+                    <td><span class="status-${t.status}">${statusTranslations[t.status] || t.status}</span></td>
+                    <td>${report_button}</td>
+                </tr>
+            `;
+        }).join('');
+
+        pageContent.innerHTML = `
+            <h2>تیکت‌های ارجاع شده به شما</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>شناسه تیکت</th>
+                            <th>عنوان</th>
+                            <th>نام مشترک</th>
+                            <th>وضعیت</th>
+                            <th>عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        pageContent.querySelectorAll('.btn-report').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticketId = e.currentTarget.dataset.id;
+                renderTicketUpdateForm(ticketId);
+            });
+        });
+    }
+
+    async function renderAssignInstallationForm(subscriptionId) {
+        const userRoleName = 'نصاب';
+        pageContent.innerHTML = `<h2>ارجاع نصب برای اشتراک #${subscriptionId}</h2><p>در حال بارگذاری لیست کاربران...</p>`;
+
+        const usersResult = await fetchAPI(`api/users.php?role=installer`);
+        if (!usersResult || usersResult.status !== 'success' || usersResult.data.length === 0) {
+            pageContent.innerHTML = `<h2>خطا: هیچ کاربر «${userRoleName}» برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscriptions-management'));
+            return;
+        }
+
+        const usersOptions = usersResult.data.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
+
+        pageContent.innerHTML = `
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست اشتراک‌ها"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ارجاع نصب اشتراک #${subscriptionId}</h2>
+            </div>
+            <form id="assign-install-form">
+                <input type="hidden" name="target_id" value="${subscriptionId}">
+                <input type="hidden" name="type" value="installation">
+                <div class="form-group">
+                    <label for="user-id">کاربر ${userRoleName}</label>
+                    <select id="user-id" name="user_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${usersOptions}
+                    </select>
+                </div>
+                <button type="submit">ارجاع نصب</button>
+            </form>
+        `;
+
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscriptions-management'));
+        document.getElementById('assign-install-form').addEventListener('submit', assignInstallation);
+    }
+
+    async function assignInstallation(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const result = await fetchAPI('api/assignments.php', {
+            method: 'POST',
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('subscriptions-management');
+        }
+    }
+
+    function renderTicketUpdateForm(ticket_id) {
+        pageContent.innerHTML = `
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد پشتیبانی"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ثبت گزارش برای تیکت #${ticket_id}</h2>
+            </div>
+            <form id="support-report-form">
+                <input type="hidden" name="type" value="support">
+                <input type="hidden" name="target_id" value="${ticket_id}">
+
+                <div class="form-group">
+                    <label for="ticket-status">تغییر وضعیت به:</label>
+                    <select id="ticket-status" name="status" required>
+                        <option value="resolved">حل شده</option>
+                        <option value="needs_investigation">نیاز به بررسی بیشتر</option>
+                        <option value="needs_recabling">نیاز به کابل‌کشی مجدد</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">گزارش اقدامات و توضیحات</label>
+                    <textarea id="notes" name="notes" rows="5" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>لوازم مصرفی (اختیاری)</label>
+                    <textarea name="materials_used" rows="3" placeholder="مثال: 2 عدد کانکتور، 1 عدد پیگتیل"></textarea>
+                </div>
+
+                <button type="submit">ثبت گزارش</button>
+            </form>
+        `;
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('support-dashboard'));
+        document.getElementById('support-report-form').addEventListener('submit', saveSupportReport);
+    }
+
+    async function saveSupportReport(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // Value is now plain text, no parsing needed.
+        if (!data.materials_used.trim()) {
+            delete data.materials_used; // Remove if empty
+        }
+
+        const result = await fetchAPI('api/workflow_reports.php', { method: 'POST', body: data });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('support-dashboard');
+        }
+    }
+
 
     // --- CRUD for FATs ---
 
@@ -778,18 +1064,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const subscriptions = result.data;
-        let tableRows = subscriptions.map(sub => `
-            <tr>
-                <td>${sub.subscriber_name}</td>
-                <td>${sub.fat_number}</td>
-                <td>${sub.port_number}</td>
-                <td>${sub.virtual_subscriber_number}</td>
-                <td>${sub.is_active ? '<span style="color:green;">فعال</span>' : '<span style="color:red;">غیرفعال</span>'}</td>
-                <td>
-                    <button class="btn-delete danger" data-id="${sub.id}">حذف</button>
-                </td>
-            </tr>
-        `).join('');
+        let tableRows = subscriptions.map(sub => {
+            let actions = '';
+            if (sub.installation_status === 'pending') {
+                actions = `<button class="btn-assign-install" data-id="${sub.id}" title="ارجاع نصب"><i class="fa-solid fa-screwdriver-wrench"></i></button>`;
+            } else if (sub.is_active) {
+                actions = `<button class="btn-support" data-id="${sub.id}" title="ایجاد تیکت پشتیبانی"><i class="fa-solid fa-headset"></i></button>`;
+            }
+            actions += ` <button class="btn-delete danger" data-id="${sub.id}" title="حذف اشتراک"><i class="fa-solid fa-trash"></i></button>`;
+
+            return `
+                <tr>
+                    <td>${sub.subscriber_name}</td>
+                    <td>${sub.fat_number}</td>
+                    <td>${sub.port_number}</td>
+                    <td>${sub.virtual_subscriber_number}</td>
+                    <td><span class="status-${sub.installation_status}">${statusTranslations[sub.installation_status] || sub.installation_status}</span></td>
+                    <td><span style="color:${sub.is_active ? 'green' : 'red'};">${activeStatusTranslations[sub.is_active]}</span></td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        }).join('');
 
         pageContent.innerHTML = `
             <h2>مدیریت اشتراک‌ها</h2>
@@ -802,7 +1097,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <th>شماره FAT</th>
                         <th>شماره پورت</th>
                         <th>شماره اشتراک مجازی</th>
-                        <th>وضعیت</th>
+                        <th>وضعیت نصب</th>
+                        <th>وضعیت فعالی</th>
                         <th>عملیات</th>
                     </tr>
                 </thead>
@@ -925,7 +1221,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${ticket.subscriber_name}</td>
                     <td><span class="status-open">باز</span></td>
                     <td>${new Date(ticket.created_at).toLocaleDateString('fa-IR')}</td>
-                    <td><button class="btn-assign-support" data-id="${ticket.id}">ارجاع به پشتیبان</button></td>
+                    <td>
+                        <button class="btn-assign-support" data-id="${ticket.id}" title="ارجاع به پشتیبان"><i class="fa-solid fa-user-plus"></i></button>
+                        <button class="btn-edit-ticket" data-id="${ticket.id}" title="ویرایش تیکت"><i class="fa-solid fa-pencil"></i></button>
+                        <button class="btn-delete-ticket danger" data-id="${ticket.id}" title="حذف تیکت"><i class="fa-solid fa-trash"></i></button>
+                    </td>
                 </tr>
             `;
         }).join('');
@@ -959,6 +1259,18 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', (e) => {
                 const ticketId = e.currentTarget.dataset.id;
                 renderAssignSupportForm(ticketId);
+            });
+        });
+        pageContent.querySelectorAll('.btn-edit-ticket').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticketId = e.currentTarget.dataset.id;
+                renderEditTicketForm(ticketId);
+            });
+        });
+        pageContent.querySelectorAll('.btn-delete-ticket').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticketId = e.currentTarget.dataset.id;
+                deleteTicket(ticketId);
             });
         });
     }
@@ -1338,7 +1650,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderInstallationReportForm(subscription_id) {
         pageContent.innerHTML = `
-            <h2>ثبت گزارش نصب برای اشتراک #${subscription_id}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد نصاب"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ثبت گزارش نصب برای اشتراک #${subscription_id}</h2>
+            </div>
             <form id="installation-report-form">
                 <input type="hidden" name="type" value="installation">
                 <input type="hidden" name="target_id" value="${subscription_id}">
@@ -1359,11 +1674,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <textarea id="notes" name="notes" rows="4"></textarea>
                 </div>
                 <button type="submit">ثبت گزارش</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('installer-dashboard'));
         document.getElementById('installation-report-form').addEventListener('submit', saveInstallationReport);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('installer-dashboard'));
     }
 
     async function saveInstallationReport(e) {

@@ -33,6 +33,12 @@ switch ($method) {
         }
         handle_post_ticket($pdo, $user_role, $user_id, $user_company_id);
         break;
+    case 'PUT':
+        handle_put_ticket($pdo, $user_role, $user_company_id);
+        break;
+    case 'DELETE':
+        handle_delete_ticket($pdo, $user_role, $user_company_id);
+        break;
     default:
         header('HTTP/1.1 405 Method Not Allowed');
         echo json_encode(['status' => 'error', 'message' => 'متد غیر مجاز']);
@@ -70,6 +76,11 @@ function handle_get_tickets($pdo, $user_role, $user_company_id) {
             $params[] = $_GET['status'];
         }
 
+        if (isset($_GET['id'])) {
+            $where_clauses[] = "st.id = ?";
+            $params[] = $_GET['id'];
+        }
+
         if (count($where_clauses) > 0) {
             $query .= " WHERE " . implode(' AND ', $where_clauses);
         }
@@ -78,7 +89,17 @@ function handle_get_tickets($pdo, $user_role, $user_company_id) {
 
         $stmt = $pdo->prepare($query);
         $stmt->execute($params);
-        $result = $stmt->fetchAll();
+
+        if (isset($_GET['id'])) {
+            $result = $stmt->fetch();
+            if (!$result) {
+                 header('HTTP/1.1 404 Not Found');
+                 echo json_encode(['status' => 'error', 'message' => 'تیکت یافت نشد']);
+                 return;
+            }
+        } else {
+            $result = $stmt->fetchAll();
+        }
 
         echo json_encode(['status' => 'success', 'data' => $result]);
 
@@ -142,6 +163,88 @@ function handle_post_ticket($pdo, $user_role, $user_id, $user_company_id) {
         error_log("POST ticket Error: " . $e->getMessage());
         header('HTTP/1.1 500 Internal Server Error');
         echo json_encode(['status' => 'error', 'message' => 'خطا در ایجاد تیکت پشتیبانی']);
+    }
+}
+
+function handle_put_ticket($pdo, $user_role, $user_company_id) {
+    $data = json_decode(file_get_contents('php://input'), true);
+
+    if (empty($data['id']) || empty($data['title']) || empty($data['description'])) {
+        header('HTTP/1.1 400 Bad Request');
+        echo json_encode(['status' => 'error', 'message' => 'شناسه، عنوان و توضیحات تیکت الزامی است.']);
+        return;
+    }
+
+    try {
+        // --- Security Check for company_admin ---
+        if ($user_role === 'company_admin') {
+            $stmt = $pdo->prepare("SELECT company_id FROM support_tickets WHERE id = ?");
+            $stmt->execute([$data['id']]);
+            $ticket = $stmt->fetch();
+            if (!$ticket || $ticket['company_id'] != $user_company_id) {
+                header('HTTP/1.1 403 Forbidden');
+                echo json_encode(['status' => 'error', 'message' => 'شما اجازه ویرایش این تیکت را ندارید.']);
+                return;
+            }
+        }
+        // Super admin can edit any ticket
+
+        $sql = "UPDATE support_tickets SET title = ?, issue_description = ? WHERE id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            htmlspecialchars(strip_tags($data['title'])),
+            htmlspecialchars(strip_tags($data['description'])),
+            $data['id']
+        ]);
+
+        if ($stmt->rowCount()) {
+            echo json_encode(['status' => 'success', 'message' => 'تیکت با موفقیت بروزرسانی شد.']);
+        } else {
+            header('HTTP/1.1 404 Not Found');
+            echo json_encode(['status' => 'error', 'message' => 'تیکت یافت نشد یا تغییری ایجاد نشد.']);
+        }
+    } catch (PDOException $e) {
+        error_log("PUT ticket Error: " . $e->getMessage());
+        header('HTTP/1.1 500 Internal Server Error');
+        echo json_encode(['status' => 'error', 'message' => 'خطا در بروزرسانی تیکت']);
+    }
+}
+
+function handle_delete_ticket($pdo, $user_role, $user_company_id) {
+    if (empty($_GET['id'])) {
+        header('HTTP/1.1 400 Bad Request');
+        echo json_encode(['status' => 'error', 'message' => 'شناسه تیکت الزامی است.']);
+        return;
+    }
+    $ticket_id = $_GET['id'];
+
+    try {
+        // --- Security Check for company_admin ---
+        if ($user_role === 'company_admin') {
+            $stmt = $pdo->prepare("SELECT company_id FROM support_tickets WHERE id = ?");
+            $stmt->execute([$ticket_id]);
+            $ticket = $stmt->fetch();
+            if (!$ticket || $ticket['company_id'] != $user_company_id) {
+                header('HTTP/1.1 403 Forbidden');
+                echo json_encode(['status' => 'error', 'message' => 'شما اجازه حذف این تیکت را ندارید.']);
+                return;
+            }
+        }
+        // Super admin can delete any ticket
+
+        $stmt = $pdo->prepare("DELETE FROM support_tickets WHERE id = ?");
+        $stmt->execute([$ticket_id]);
+
+        if ($stmt->rowCount()) {
+            echo json_encode(['status' => 'success', 'message' => 'تیکت با موفقیت حذف شد.']);
+        } else {
+            header('HTTP/1.1 404 Not Found');
+            echo json_encode(['status' => 'error', 'message' => 'تیکت یافت نشد.']);
+        }
+    } catch (PDOException $e) {
+        error_log("DELETE ticket Error: " . $e->getMessage());
+        header('HTTP/1.1 500 Internal Server Error');
+        echo json_encode(['status' => 'error', 'message' => 'خطا در حذف تیکت']);
     }
 }
 ?>

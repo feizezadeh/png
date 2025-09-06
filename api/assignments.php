@@ -48,9 +48,21 @@ function handle_get_assignments($pdo, $user_role, $user_id) {
             $assignments = $stmt->fetchAll();
             echo json_encode(['status' => 'success', 'data' => $assignments]);
         } elseif ($user_role === 'support') {
-            // Logic for support users to get their tickets
-            // To be fully implemented in the next phase
-            echo json_encode(['status' => 'success', 'data' => []]); // Placeholder
+            $query = "
+                SELECT
+                    st.id, st.title, st.status, st.created_at,
+                    s.full_name as subscriber_name,
+                    sub.virtual_subscriber_number
+                FROM support_tickets st
+                JOIN subscriptions sub ON st.subscription_id = sub.id
+                JOIN subscribers s ON sub.subscriber_id = s.id
+                WHERE st.assigned_support_id = ?
+                ORDER BY st.updated_at DESC
+            ";
+            $stmt = $pdo->prepare($query);
+            $stmt->execute([$user_id]);
+            $assignments = $stmt->fetchAll();
+            echo json_encode(['status' => 'success', 'data' => $assignments]);
         } else {
             header('HTTP/1.1 403 Forbidden');
             echo json_encode(['status' => 'error', 'message' => 'نقش شما برای دریافت لیست کارها مجاز نیست.']);
