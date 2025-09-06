@@ -184,9 +184,6 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'users-management':
                 renderUsersManagement();
                 break;
-            case 'tasks-management':
-                renderTasksManagement();
-                break;
             case 'installer-dashboard':
                 renderInstallerDashboard();
                 break;
@@ -271,7 +268,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         pageContent.innerHTML = `
-            <h2>${title}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>${title}</h2>
+            </div>
             <form id="center-form">
                 <input type="hidden" name="id" value="${center.id || ''}">
                 <div class="form-group">
@@ -279,12 +279,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="text" id="center-name" name="name" value="${center.name}" required>
                 </div>
                 <button type="submit">ذخیره</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('telecom-centers-management'));
         document.getElementById('center-form').addEventListener('submit', saveCenter);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('telecom-centers-management'));
     }
 
     async function saveCenter(e) {
@@ -321,7 +320,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderCreateTicketForm(subscription_id) {
         pageContent.innerHTML = `
-            <h2>ایجاد تیکت پشتیبانی برای اشتراک #${subscription_id}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست اشتراک‌ها"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ایجاد تیکت پشتیبانی برای اشتراک #${subscription_id}</h2>
+            </div>
             <form id="create-ticket-form">
                 <input type="hidden" name="subscription_id" value="${subscription_id}">
                 <div class="form-group">
@@ -333,11 +335,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <textarea id="ticket-description" name="description" rows="5" required></textarea>
                 </div>
                 <button type="submit">ایجاد تیکت</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscriptions-management'));
         document.getElementById('create-ticket-form').addEventListener('submit', saveTicket);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscriptions-management'));
     }
 
     async function saveTicket(e) {
@@ -424,7 +425,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderTicketUpdateForm(ticket_id) {
         pageContent.innerHTML = `
-            <h2>ثبت گزارش برای تیکت #${ticket_id}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد پشتیبانی"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ثبت گزارش برای تیکت #${ticket_id}</h2>
+            </div>
             <form id="support-report-form">
                 <input type="hidden" name="type" value="support">
                 <input type="hidden" name="target_id" value="${ticket_id}">
@@ -449,11 +453,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
 
                 <button type="submit">ثبت گزارش</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('support-dashboard'));
         document.getElementById('support-report-form').addEventListener('submit', saveSupportReport);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('support-dashboard'));
     }
 
     async function saveSupportReport(e) {
@@ -482,142 +485,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Task Management (Unified View) ---
-
-    async function renderTasksManagement() {
-        const result = await fetchAPI('api/tasks.php');
-        if (!result || result.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا در بارگذاری وظایف</h2>';
-            return;
-        }
-
-        const tasks = result.data;
-        if (tasks.length === 0) {
-            pageContent.innerHTML = `
-                <div class="page-header">
-                    <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                    <h2>مدیریت وظایف</h2>
-                </div>
-                <p>در حال حاضر هیچ وظیفه باز برای ارجاع وجود ندارد.</p>
-            `;
-            pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
-            return;
-        }
-
-        let tableRows = tasks.map(task => {
-            const taskTypeDisplay = task.type === 'installation' ? 'نصب' : 'پشتیبانی';
-            const taskTypeClass = task.type === 'installation' ? 'status-installation' : 'status-support';
-            return `
-                <tr>
-                    <td>${task.id}</td>
-                    <td><span class="status ${taskTypeClass}">${taskTypeDisplay}</span></td>
-                    <td>${task.subject}</td>
-                    <td>${task.title}</td>
-                    <td>${new Date(task.created_at).toLocaleDateString('fa-IR')}</td>
-                    <td><button class="btn-assign" data-id="${task.id}" data-type="${task.type}">ارجاع</button></td>
-                </tr>
-            `;
-        }).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>مدیریت وظایف</h2>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>شناسه</th>
-                            <th>نوع وظیفه</th>
-                            <th>موضوع (مشترک)</th>
-                            <th>عنوان / آدرس</th>
-                            <th>تاریخ ایجاد</th>
-                            <th>عملیات</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRows}
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
-        pageContent.querySelectorAll('.btn-assign').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const button = e.currentTarget;
-                renderAssignTaskForm(button.dataset.id, button.dataset.type);
-            });
-        });
-    }
-
-    // --- Task Assignment Form ---
-
-    async function renderAssignTaskForm(taskId, taskType) {
-        const roleToFetch = taskType === 'installation' ? 'installer' : 'support';
-        const userRoleName = taskType === 'installation' ? 'نصاب' : 'پشتیبان';
-
-        pageContent.innerHTML = `<h2>ارجاع وظیفه #${taskId}</h2><p>در حال بارگذاری لیست کاربران...</p>`;
-
-        const usersResult = await fetchAPI(`api/users.php?role=${roleToFetch}`);
-        if (!usersResult || usersResult.status !== 'success' || usersResult.data.length === 0) {
-            pageContent.innerHTML = `<h2>خطا: هیچ کاربر «${userRoleName}» برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
-            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tasks-management'));
-            return;
-        }
-
-        // Filter out the current user to prevent self-assignment
-        const currentUserId = appState.currentUser.id;
-        const filteredUsers = usersResult.data.filter(user => user.id != currentUserId);
-
-        if (filteredUsers.length === 0) {
-            pageContent.innerHTML = `<h2>خطا: هیچ کاربر دیگری برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
-            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tasks-management'));
-            return;
-        }
-
-        const usersOptions = filteredUsers.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به لیست وظایف"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>ارجاع وظیفه ${taskType} #${taskId}</h2>
-            </div>
-            <form id="assign-task-form">
-                <input type="hidden" name="target_id" value="${taskId}">
-                <input type="hidden" name="type" value="${taskType}">
-                <div class="form-group">
-                    <label for="user-id">کاربر ${userRoleName}</label>
-                    <select id="user-id" name="user_id" required>
-                        <option value="">انتخاب کنید...</option>
-                        ${usersOptions}
-                    </select>
-                </div>
-                <button type="submit">ارجاع وظیفه</button>
-            </form>
-        `;
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('tasks-management'));
-        document.getElementById('assign-task-form').addEventListener('submit', assignTask);
-    }
-
-    async function assignTask(e) {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        const result = await fetchAPI('api/assignments.php', {
-            method: 'POST',
-            body: data
-        });
-
-        if (result && result.status === 'success') {
-            alert(result.message);
-            navigateTo('tasks-management');
-        }
-    }
 
 
     // --- CRUD for FATs ---
@@ -696,7 +563,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         pageContent.innerHTML = `
-            <h2>${title}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>${title}</h2>
+            </div>
             <form id="fat-form">
                 <input type="hidden" name="id" value="${fat.id || ''}">
                 <div class="form-group">
@@ -740,7 +610,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <textarea id="address" name="address" rows="3">${fat.address}</textarea>
                 </div>
                 <button type="submit">ذخیره</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
 
@@ -750,8 +619,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         initializeMap(fat.latitude, fat.longitude);
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('fats-management'));
         document.getElementById('fat-form').addEventListener('submit', saveFat);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('fats-management'));
     }
 
     function initializeMap(lat, lng) {
@@ -1000,7 +869,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         pageContent.innerHTML = `
-            <h2>${title}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>${title}</h2>
+            </div>
             <form id="subscriber-form">
                 <input type="hidden" name="id" value="${subscriber.id || ''}">
                 <div class="form-group">
@@ -1016,12 +888,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="text" id="national-id" name="national_id" value="${subscriber.national_id || ''}" pattern="^[0-9]{10}$" title="کد ملی باید 10 رقم باشد">
                 </div>
                 <button type="submit">ذخیره</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscribers-management'));
         document.getElementById('subscriber-form').addEventListener('submit', saveSubscriber);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscribers-management'));
     }
 
     async function saveSubscriber(e) {
@@ -1068,19 +939,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const subscriptions = result.data;
-        let tableRows = subscriptions.map(sub => `
-            <tr>
-                <td>${sub.subscriber_name}</td>
-                <td>${sub.fat_number}</td>
-                <td>${sub.port_number}</td>
-                <td>${sub.virtual_subscriber_number}</td>
-                <td>${sub.is_active ? '<span style="color:green;">فعال</span>' : '<span style="color:red;">غیرفعال</span>'}</td>
-                <td>
-                    <button class="btn-support" data-id="${sub.id}" title="ایجاد تیکت پشتیبانی"><i class="fa-solid fa-headset"></i></button>
-                    <button class="btn-delete danger" data-id="${sub.id}" title="حذف اشتراک"><i class="fa-solid fa-trash"></i></button>
-                </td>
-            </tr>
-        `).join('');
+        let tableRows = subscriptions.map(sub => {
+            let actions = '';
+            if (sub.installation_status === 'pending') {
+                actions = `<button class="btn-assign-install" data-id="${sub.id}" title="ارجاع نصب"><i class="fa-solid fa-screwdriver-wrench"></i></button>`;
+            } else if (sub.is_active) {
+                actions = `<button class="btn-support" data-id="${sub.id}" title="ایجاد تیکت پشتیبانی"><i class="fa-solid fa-headset"></i></button>`;
+            }
+            // Always add the delete button
+            actions += ` <button class="btn-delete danger" data-id="${sub.id}" title="حذف اشتراک"><i class="fa-solid fa-trash"></i></button>`;
+
+            return `
+                <tr>
+                    <td>${sub.subscriber_name}</td>
+                    <td>${sub.fat_number}</td>
+                    <td>${sub.port_number}</td>
+                    <td>${sub.virtual_subscriber_number}</td>
+                    <td>${sub.is_active ? '<span style="color:green;">فعال</span>' : '<span style="color:red;">غیرفعال</span>'}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        }).join('');
 
         pageContent.innerHTML = `
             <div class="page-header">
@@ -1109,6 +988,13 @@ document.addEventListener('DOMContentLoaded', () => {
         pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('add-new-subscription-btn').addEventListener('click', () => renderAddEditSubscriptionForm());
 
+        pageContent.querySelectorAll('.btn-assign-install').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const subId = e.currentTarget.dataset.id;
+                renderAssignInstallationForm(subId);
+            });
+        });
+
         pageContent.querySelectorAll('.btn-support').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const subId = e.currentTarget.dataset.id;
@@ -1122,6 +1008,59 @@ document.addEventListener('DOMContentLoaded', () => {
                 deleteSubscription(subId);
             });
         });
+    }
+
+    async function renderAssignInstallationForm(subscriptionId) {
+        const userRoleName = 'نصاب';
+        pageContent.innerHTML = `<h2>ارجاع نصب برای اشتراک #${subscriptionId}</h2><p>در حال بارگذاری لیست کاربران...</p>`;
+
+        const usersResult = await fetchAPI(`api/users.php?role=installer`);
+        if (!usersResult || usersResult.status !== 'success' || usersResult.data.length === 0) {
+            pageContent.innerHTML = `<h2>خطا: هیچ کاربر «${userRoleName}» برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscriptions-management'));
+            return;
+        }
+
+        const usersOptions = usersResult.data.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
+
+        pageContent.innerHTML = `
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست اشتراک‌ها"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ارجاع نصب اشتراک #${subscriptionId}</h2>
+            </div>
+            <form id="assign-install-form">
+                <input type="hidden" name="target_id" value="${subscriptionId}">
+                <input type="hidden" name="type" value="installation">
+                <div class="form-group">
+                    <label for="user-id">کاربر ${userRoleName}</label>
+                    <select id="user-id" name="user_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${usersOptions}
+                    </select>
+                </div>
+                <button type="submit">ارجاع نصب</button>
+            </form>
+        `;
+
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscriptions-management'));
+        document.getElementById('assign-install-form').addEventListener('submit', assignInstallation);
+    }
+
+    async function assignInstallation(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const result = await fetchAPI('api/assignments.php', {
+            method: 'POST',
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('subscriptions-management');
+        }
     }
 
     async function renderAddEditSubscriptionForm(id = null) {
@@ -1144,7 +1083,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const fatsOptions = fatsResult.data.map(f => `<option value="${f.id}" data-capacity="${f.splitter_type.split(':')[1]}">${f.fat_number}</option>`).join('');
 
         pageContent.innerHTML = `
-            <h2>${title}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>${title}</h2>
+            </div>
             <form id="subscription-form">
                 <div class="form-group">
                     <label for="subscriber-id">مشترک</label>
@@ -1176,7 +1118,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     </label>
                 </div>
                 <button type="submit">ذخیره</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
 
@@ -1195,8 +1136,8 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('fat-capacity-info').textContent = `ظرفیت: ${occupied} / ${capacity}`;
         });
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscriptions-management'));
         document.getElementById('subscription-form').addEventListener('submit', saveSubscription);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscriptions-management'));
     }
 
     async function saveSubscription(e) {
@@ -1286,7 +1227,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         pageContent.innerHTML = `
-            <h2>${title}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>${title}</h2>
+            </div>
             <form id="company-form">
                 <input type="hidden" name="id" value="${company.id || ''}">
                 <div class="form-group">
@@ -1298,13 +1242,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="text" id="expires-at" name="expires_at" value="${company.expires_at ? company.expires_at.split(' ')[0] : ''}" data-jdp>
                 </div>
                 <button type="submit">ذخیره</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
 
         jalaliDatepicker.startWatch({ selector: '[data-jdp]', time: false });
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('companies-management'));
         document.getElementById('company-form').addEventListener('submit', saveCompany);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('companies-management'));
     }
 
     async function saveCompany(e) {
@@ -1404,8 +1347,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const roleSelect = document.getElementById('user-role');
             roleSelect.innerHTML = roleOptions;
 
+            pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('users-management'));
             document.getElementById('user-form').addEventListener('submit', saveUser);
-            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
         });
     }
 
@@ -1439,8 +1382,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             document.getElementById('user-role').innerHTML = roleOptions;
 
+            pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('users-management'));
             document.getElementById('user-form').addEventListener('submit', saveUser);
-            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
         });
     }
 
@@ -1540,7 +1483,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderInstallationReportForm(subscription_id) {
         pageContent.innerHTML = `
-            <h2>ثبت گزارش نصب برای اشتراک #${subscription_id}</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد نصاب"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ثبت گزارش نصب برای اشتراک #${subscription_id}</h2>
+            </div>
             <form id="installation-report-form">
                 <input type="hidden" name="type" value="installation">
                 <input type="hidden" name="target_id" value="${subscription_id}">
@@ -1561,11 +1507,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <textarea id="notes" name="notes" rows="4"></textarea>
                 </div>
                 <button type="submit">ثبت گزارش</button>
-                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('installer-dashboard'));
         document.getElementById('installation-report-form').addEventListener('submit', saveInstallationReport);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('installer-dashboard'));
     }
 
     async function saveInstallationReport(e) {

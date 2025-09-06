@@ -35,7 +35,7 @@ function handle_get_subscriptions($pdo, $user_role, $user_company_id) {
     try {
         $query = "
             SELECT
-                sub.id, sub.port_number, sub.virtual_subscriber_number, sub.is_active, sub.created_at,
+                sub.id, sub.port_number, sub.virtual_subscriber_number, sub.is_active, sub.installation_status, sub.created_at,
                 s.full_name AS subscriber_name, s.mobile_number,
                 f.fat_number,
                 tc.name AS telecom_center_name
