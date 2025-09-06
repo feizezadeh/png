@@ -8,6 +8,21 @@ document.addEventListener('DOMContentLoaded', () => {
         dataCache: {},
     };
 
+    const statusTranslations = {
+        open: 'باز',
+        assigned: 'ارجاع شده',
+        resolved: 'حل شده',
+        needs_investigation: 'نیاز به بررسی',
+        needs_recabling: 'نیاز به کابل‌کشی مجدد',
+        pending: 'در انتظار نصب',
+        completed: 'تکمیل شده'
+    };
+
+    const activeStatusTranslations = {
+        true: 'فعال',
+        false: 'غیرفعال'
+    };
+
     // --- Element Selectors ---
     const mainContent = document.getElementById('main-content');
     const loginContainer = document.getElementById('login-container');
@@ -184,6 +199,9 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'users-management':
                 renderUsersManagement();
                 break;
+            case 'tickets-management':
+                renderTicketsManagement();
+                break;
             case 'installer-dashboard':
                 renderInstallerDashboard();
                 break;
@@ -358,6 +376,121 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function renderTicketsManagement() {
+        const result = await fetchAPI('api/tickets.php?status=open');
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری تیکت‌ها</h2>';
+            return;
+        }
+
+        const tickets = result.data;
+        let tableRows = tickets.map(ticket => {
+            return `
+                <tr>
+                    <td>${ticket.id}</td>
+                    <td>${ticket.title}</td>
+                    <td>${ticket.subscriber_name}</td>
+                    <td><span class="status-${ticket.status}">${statusTranslations[ticket.status] || ticket.status}</span></td>
+                    <td>${new Date(ticket.created_at).toLocaleDateString('fa-IR')}</td>
+                    <td><button class="btn-assign-support" data-id="${ticket.id}">ارجاع به پشتیبان</button></td>
+                </tr>
+            `;
+        }).join('');
+
+        pageContent.innerHTML = `
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>مدیریت تیکت‌های پشتیبانی باز</h2>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>شناسه</th>
+                            <th>عنوان</th>
+                            <th>مشترک</th>
+                            <th>وضعیت</th>
+                            <th>تاریخ ایجاد</th>
+                            <th>عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tickets.length > 0 ? tableRows : '<tr><td colspan="6" style="text-align:center;">هیچ تیکت بازی برای ارجاع وجود ندارد.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
+        pageContent.querySelectorAll('.btn-assign-support').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticketId = e.currentTarget.dataset.id;
+                renderAssignSupportForm(ticketId);
+            });
+        });
+    }
+
+    async function renderAssignSupportForm(ticketId) {
+        pageContent.innerHTML = `<h2>ارجاع تیکت #${ticketId}</h2><p>در حال بارگذاری لیست کاربران...</p>`;
+
+        const usersResult = await fetchAPI('api/users.php?role=support');
+        if (!usersResult || usersResult.status !== 'success' || usersResult.data.length === 0) {
+            pageContent.innerHTML = `<h2>خطا: هیچ کاربر پشتیبانی در شرکت شما یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tickets-management'));
+            return;
+        }
+
+        const currentUserId = appState.currentUser.id;
+        const filteredUsers = usersResult.data.filter(user => user.id != currentUserId);
+
+        if (filteredUsers.length === 0) {
+            pageContent.innerHTML = `<h2>خطا: هیچ کاربر پشتیبانی دیگری برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tickets-management'));
+            return;
+        }
+
+        const supportUsersOptions = filteredUsers.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
+
+        pageContent.innerHTML = `
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست تیکت‌ها"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ارجاع تیکت پشتیبانی #${ticketId}</h2>
+            </div>
+            <form id="assign-support-form">
+                <input type="hidden" name="target_id" value="${ticketId}">
+                <input type="hidden" name="type" value="support">
+                <div class="form-group">
+                    <label for="user-id">کاربر پشتیبان</label>
+                    <select id="user-id" name="user_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${supportUsersOptions}
+                    </select>
+                </div>
+                <button type="submit">ارجاع تیکت</button>
+            </form>
+        `;
+
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('tickets-management'));
+        document.getElementById('assign-support-form').addEventListener('submit', assignSupportTicket);
+    }
+
+    async function assignSupportTicket(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const result = await fetchAPI('api/assignments.php', {
+            method: 'POST',
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('tickets-management');
+        }
+    }
+
     // --- Support UI ---
 
     async function renderSupportDashboard() {
@@ -385,7 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${t.id}</td>
                     <td>${t.title}</td>
                     <td>${t.subscriber_name}</td>
-                    <td><span class="status-${t.status}">${t.status}</span></td>
+                    <td><span class="status-${t.status}">${statusTranslations[t.status] || t.status}</span></td>
                     <td>${report_button}</td>
                 </tr>
             `;
@@ -448,8 +581,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
 
                 <div class="form-group">
-                    <label>لوازم مصرفی (اختیاری - فرمت JSON)</label>
-                    <textarea name="materials_used" rows="3" placeholder='[{"item": "patch cord", "quantity": 1}]'></textarea>
+                    <label>لوازم مصرفی (اختیاری)</label>
+                    <textarea name="materials_used" rows="3" placeholder="مثال: 2 عدد کانکتور، 1 عدد پیگتیل"></textarea>
                 </div>
 
                 <button type="submit">ثبت گزارش</button>
@@ -465,16 +598,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
 
-        // Validate and parse JSON
-        try {
-            if (data.materials_used.trim()) {
-                data.materials_used = JSON.parse(data.materials_used);
-            } else {
-                delete data.materials_used; // Remove if empty
-            }
-        } catch (error) {
-            alert('فرمت JSON برای لوازم مصرفی نامعتبر است.');
-            return;
+        // Value is now plain text, no parsing needed.
+        if (!data.materials_used.trim()) {
+            delete data.materials_used; // Remove if empty
         }
 
         const result = await fetchAPI('api/workflow_reports.php', { method: 'POST', body: data });
@@ -955,7 +1081,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${sub.fat_number}</td>
                     <td>${sub.port_number}</td>
                     <td>${sub.virtual_subscriber_number}</td>
-                    <td>${sub.is_active ? '<span style="color:green;">فعال</span>' : '<span style="color:red;">غیرفعال</span>'}</td>
+                    <td><span class="status-${sub.installation_status}">${statusTranslations[sub.installation_status] || sub.installation_status}</span></td>
+                    <td><span style="color:${sub.is_active ? 'green' : 'red'};">${activeStatusTranslations[sub.is_active]}</span></td>
                     <td>${actions}</td>
                 </tr>
             `;
@@ -975,7 +1102,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <th>شماره FAT</th>
                         <th>شماره پورت</th>
                         <th>شماره اشتراک مجازی</th>
-                        <th>وضعیت</th>
+                        <th>وضعیت نصب</th>
+                        <th>وضعیت فعالی</th>
                         <th>عملیات</th>
                     </tr>
                 </thead>

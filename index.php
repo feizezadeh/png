@@ -78,6 +78,10 @@
                     <i class="fa-solid fa-users-cog fa-3x"></i>
                     <span>مدیریت کاربران</span>
                 </div>
+                <div class="tile" data-target="tickets-management" data-role="super_admin company_admin">
+                    <i class="fa-solid fa-life-ring fa-3x"></i>
+                    <span>مدیریت تیکت‌ها</span>
+                </div>
                 <div class="tile" data-target="installer-dashboard" data-role="installer">
                     <i class="fa-solid fa-screwdriver-wrench fa-3x"></i>
                     <span>داشبورد نصاب</span>
