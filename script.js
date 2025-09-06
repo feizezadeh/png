@@ -151,6 +151,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function navigateTo(page, params = {}) {
         appState.currentPage = page;
         pageContent.innerHTML = '<h2><i class="fa-solid fa-spinner fa-spin"></i> در حال بارگذاری...</h2>';
+        const tileMenu = document.getElementById('tile-menu');
+
+        if (page === 'dashboard') {
+            tileMenu.style.display = 'grid';
+        } else {
+            tileMenu.style.display = 'none';
+        }
 
         switch (page) {
             case 'dashboard':
@@ -187,7 +194,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderSupportDashboard();
                 break;
             default:
+                tileMenu.style.display = 'grid'; // Show menu again if page not found
                 pageContent.innerHTML = '<h2>صفحه مورد نظر یافت نشد</h2>';
+                break;
         }
     }
 
@@ -221,7 +230,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
 
         pageContent.innerHTML = `
-            <h2>مدیریت مراکز مخابراتی</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>مدیریت مراکز مخابراتی</h2>
+            </div>
             <button id="add-new-center-btn">افزودن مرکز جدید</button>
             <div class="table-container">
                 <table>
@@ -240,6 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         // Add event listeners for new buttons
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('add-new-center-btn').addEventListener('click', () => renderAddEditCenterForm());
         pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditCenterForm(e.target.dataset.id)));
         pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteCenter(e.target.dataset.id)));
@@ -378,7 +391,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
 
         pageContent.innerHTML = `
-            <h2>تیکت‌های ارجاع شده به شما</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>تیکت‌های ارجاع شده به شما</h2>
+            </div>
             <div class="table-container">
                 <table>
                     <thead>
@@ -397,6 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         pageContent.querySelectorAll('.btn-report').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const ticketId = e.currentTarget.dataset.id;
@@ -496,7 +513,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
 
         pageContent.innerHTML = `
-            <h2>مدیریت تیکت‌های پشتیبانی</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>مدیریت تیکت‌های پشتیبانی</h2>
+            </div>
             <div class="table-container">
                 <table>
                     <thead>
@@ -516,6 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         pageContent.querySelectorAll('.btn-refer').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const ticketId = e.currentTarget.dataset.id;
@@ -599,7 +620,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
 
         pageContent.innerHTML = `
-            <h2>مدیریت FAT ها</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>مدیریت FAT ها</h2>
+            </div>
             <button id="add-new-fat-btn">افزودن FAT جدید</button>
             <div class="table-container">
                 <table>
@@ -619,6 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </table>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('add-new-fat-btn').addEventListener('click', () => renderAddEditFatForm());
         pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditFatForm(e.target.dataset.id)));
         pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteFat(e.target.dataset.id)));
@@ -790,7 +815,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const fatsOptions = fatsResult.data.map(f => `<option value="${f.id}">${f.fat_number}</option>`).join('');
 
         pageContent.innerHTML = `
-            <h2>گزارش‌گیری پیشرفته</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>گزارش‌گیری پیشرفته</h2>
+            </div>
             <form id="report-filters-form">
                 <div class="form-group">
                     <label for="filter-fat">فیلتر بر اساس FAT</label>
@@ -834,6 +862,7 @@ document.addEventListener('DOMContentLoaded', () => {
             time: false,
         });
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('generate-json-btn').addEventListener('click', () => generateReport('json'));
         document.getElementById('generate-csv-btn').addEventListener('click', () => generateReport('csv'));
         document.getElementById('generate-pdf-btn').addEventListener('click', () => generateReport('pdf'));
@@ -907,7 +936,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
 
         pageContent.innerHTML = `
-            <h2>مدیریت مشترکین</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>مدیریت مشترکین</h2>
+            </div>
             <button id="add-new-subscriber-btn">افزودن مشترک جدید</button>
             <div class="table-container">
                 <table>
@@ -925,6 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </table>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('add-new-subscriber-btn').addEventListener('click', () => renderAddEditSubscriberForm());
         pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditSubscriberForm(e.target.dataset.id)));
         pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteSubscriber(e.target.dataset.id)));
@@ -1025,7 +1058,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
 
         pageContent.innerHTML = `
-            <h2>مدیریت اشتراک‌ها</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>مدیریت اشتراک‌ها</h2>
+            </div>
             <button id="add-new-subscription-btn">افزودن اشتراک جدید</button>
             <div class="table-container">
                 <table>
@@ -1045,6 +1081,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </table>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('add-new-subscription-btn').addEventListener('click', () => renderAddEditSubscriptionForm());
 
         pageContent.querySelectorAll('.btn-support').forEach(btn => {
@@ -1187,7 +1224,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
 
         pageContent.innerHTML = `
-            <h2>مدیریت شرکت‌ها</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>مدیریت شرکت‌ها</h2>
+            </div>
             <button id="add-new-company-btn">افزودن شرکت جدید</button>
             <table>
                 <thead>
@@ -1203,6 +1243,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </table>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('add-new-company-btn').addEventListener('click', () => renderAddEditCompanyForm());
         pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditCompanyForm(e.target.dataset.id)));
         pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteCompany(e.target.dataset.id)));
@@ -1307,6 +1348,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tableBody.appendChild(row);
             });
 
+            pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
             document.getElementById('add-new-user-btn').addEventListener('click', () => renderAddUserForm());
         });
     }
@@ -1445,7 +1487,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
 
         pageContent.innerHTML = `
-            <h2>کارهای ارجاع شده به شما</h2>
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>کارهای ارجاع شده به شما</h2>
+            </div>
             <div class="table-container">
                 <table>
                     <thead>
@@ -1464,6 +1509,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         pageContent.querySelectorAll('.btn-report').forEach(btn => btn.addEventListener('click', (e) => renderInstallationReportForm(e.target.dataset.id)));
     }
 
