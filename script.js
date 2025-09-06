@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tile.style.display = 'block';
             } else {
                 // Show if user's role is in the list of required roles
-                if (requiredRoles.split(' ').includes(userRole)) {
+                if (requiredRoles.trim().split(' ').includes(userRole)) {
                     tile.style.display = 'block';
                 } else {
                     tile.style.display = 'none';
@@ -555,7 +555,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const supportUsersOptions = usersResult.data.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
+        // Filter out the current user to prevent self-assignment
+        const currentUserId = appState.currentUser.id;
+        const filteredUsers = usersResult.data.filter(user => user.id != currentUserId);
+
+        if (filteredUsers.length === 0) {
+            pageContent.innerHTML = '<h2>خطا: هیچ کاربر پشتیبانی دیگری برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>';
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tickets-management'));
+            return;
+        }
+
+        const supportUsersOptions = filteredUsers.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
 
         pageContent.innerHTML = `
             <h2>ارجاع تیکت #${ticketId}</h2>

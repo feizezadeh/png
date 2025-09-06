@@ -44,6 +44,7 @@ try {
             'status' => 'success',
             'message' => 'ورود با موفقیت انجام شد',
             'data' => [
+                'id' => $user['id'],
                 'username' => $user['username'],
                 'role' => $user['role']
             ]
