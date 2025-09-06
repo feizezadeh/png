@@ -30,7 +30,7 @@ function check_permission($required_roles): bool {
 
     // 4. Check if user's role is in the required roles array
     // An admin has access to everything
-    if ($user_role === 'admin' || in_array($user_role, $required_roles)) {
+    if ($user_role === 'super_admin' || in_array($user_role, $required_roles)) {
         return true;
     }
 
