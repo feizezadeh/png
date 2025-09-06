@@ -62,6 +62,9 @@ function handle_post_companies($pdo) {
         $stmt = $pdo->prepare($sql);
 
         $expires_at = !empty($data['expires_at']) ? $data['expires_at'] : null;
+        if ($expires_at) {
+            $expires_at = str_replace('/', '-', $expires_at);
+        }
         $stmt->execute([htmlspecialchars(strip_tags($data['name'])), $expires_at]);
 
         $new_id = $pdo->lastInsertId();
@@ -98,6 +101,9 @@ function handle_put_companies($pdo) {
         $stmt = $pdo->prepare($sql);
 
         $expires_at = !empty($data['expires_at']) ? $data['expires_at'] : null;
+        if ($expires_at) {
+            $expires_at = str_replace('/', '-', $expires_at);
+        }
         $stmt->execute([htmlspecialchars(strip_tags($data['name'])), $expires_at, $data['id']]);
 
         if ($stmt->rowCount()) {
