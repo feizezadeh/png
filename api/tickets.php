@@ -17,8 +17,8 @@ $user_role = $_SESSION['role'];
 $user_id = $_SESSION['user_id'];
 $user_company_id = $_SESSION['company_id'] ?? null;
 
-// Only company_admin, support, and super_admin roles can access this API
-secure_api_endpoint(['company_admin', 'support', 'super_admin']);
+// Define access control for this endpoint
+secure_api_endpoint(['super_admin', 'company_admin', 'support']);
 
 switch ($method) {
     case 'GET':
@@ -43,18 +43,14 @@ function handle_get_tickets($pdo, $user_role, $user_company_id) {
     try {
         $query = "
             SELECT
-                st.id,
-                st.subscription_id,
-                st.issue_description AS title,
-                st.status,
-                st.created_at,
+                st.id, st.subscription_id, st.title, st.status, st.created_at,
                 s.virtual_subscriber_number,
                 sub.full_name AS subscriber_name,
                 u_creator.username AS created_by,
                 u_assignee.username AS assigned_to
             FROM support_tickets st
             JOIN subscriptions s ON st.subscription_id = s.id
-            JOIN subscribers sub ON s.subscriber_id = sub.id
+            JOIN subscribers sub ON s.subscriber_id = s.id
             JOIN users u_creator ON st.created_by_user_id = u_creator.id
             LEFT JOIN users u_assignee ON st.assigned_support_id = u_assignee.id
         ";
@@ -62,17 +58,13 @@ function handle_get_tickets($pdo, $user_role, $user_company_id) {
         $params = [];
         $where_clauses = [];
 
-        // Data Scoping
-        if ($user_role === 'company_admin' || $user_role === 'support') {
+        // Data Scoping for non-super-admins
+        if ($user_role !== 'super_admin') {
             $where_clauses[] = "st.company_id = ?";
             $params[] = $user_company_id;
         }
 
-        if (isset($_GET['id'])) {
-            $where_clauses[] = "st.id = ?";
-            $params[] = $_GET['id'];
-        }
-
+        // Filter by status if provided
         if (isset($_GET['status'])) {
             $where_clauses[] = "st.status = ?";
             $params[] = $_GET['status'];
@@ -86,17 +78,7 @@ function handle_get_tickets($pdo, $user_role, $user_company_id) {
 
         $stmt = $pdo->prepare($query);
         $stmt->execute($params);
-
-        if (isset($_GET['id'])) {
-            $result = $stmt->fetch();
-             if (!$result) {
-                 header('HTTP/1.1 404 Not Found');
-                 echo json_encode(['status' => 'error', 'message' => 'تیکت یافت نشد']);
-                 return;
-            }
-        } else {
-            $result = $stmt->fetchAll();
-        }
+        $result = $stmt->fetchAll();
 
         echo json_encode(['status' => 'success', 'data' => $result]);
 
@@ -117,7 +99,7 @@ function handle_post_ticket($pdo, $user_role, $user_id, $user_company_id) {
     }
 
     try {
-        // --- Get subscription's company and check permissions ---
+        // Get subscription's company and check permissions
         $stmt = $pdo->prepare("SELECT f.company_id FROM subscriptions sub JOIN fats f ON sub.fat_id = f.id WHERE sub.id = ?");
         $stmt->execute([$data['subscription_id']]);
         $subscription_owner = $stmt->fetch();
@@ -146,7 +128,7 @@ function handle_post_ticket($pdo, $user_role, $user_id, $user_company_id) {
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             $data['subscription_id'],
-            $ticket_company_id, // Use the company_id from the subscription itself
+            $ticket_company_id,
             htmlspecialchars(strip_tags($data['title'])),
             htmlspecialchars(strip_tags($data['description'])),
             $user_id

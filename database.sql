@@ -92,16 +92,16 @@ CREATE TABLE `installation_reports` (
   CONSTRAINT `fk_ir_installer` FOREIGN KEY (`installer_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
--- جدول تیکت‌های پشتیبانی
+-- جدول تیکت‌های پشتیبانی (نسخه کامل شده)
 CREATE TABLE `support_tickets` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `subscription_id` INT NOT NULL,
   `company_id` INT NOT NULL,
-  `created_by_user_id` INT NOT NULL,
-  `assigned_support_id` INT NULL,
   `title` VARCHAR(255) NOT NULL,
   `issue_description` TEXT NOT NULL,
-  `status` ENUM('open', 'assigned', 'resolved', 'needs_investigation', 'needs_recabling') DEFAULT 'open',
+  `status` ENUM('open', 'assigned', 'resolved', 'needs_investigation', 'needs_recabling') NOT NULL DEFAULT 'open',
+  `created_by_user_id` INT NOT NULL,
+  `assigned_support_id` INT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `fk_st_subscription` FOREIGN KEY (`subscription_id`) REFERENCES `subscriptions`(`id`) ON DELETE CASCADE,

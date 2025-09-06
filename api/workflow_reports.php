@@ -63,8 +63,8 @@ function handle_post_report($pdo, $user_role, $user_id) {
                 $data['notes'] ?? null
             ]);
 
-            // --- Update Subscription Status and Activate ---
-            $stmt = $pdo->prepare("UPDATE subscriptions SET installation_status = 'completed', is_active = 1 WHERE id = ?");
+            // --- Update Subscription Status ---
+            $stmt = $pdo->prepare("UPDATE subscriptions SET installation_status = 'completed' WHERE id = ?");
             $stmt->execute([$data['target_id']]);
 
             header('HTTP/1.1 201 Created');

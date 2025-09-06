@@ -8,21 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
         dataCache: {},
     };
 
-    const statusTranslations = {
-        open: 'باز',
-        assigned: 'ارجاع شده',
-        resolved: 'حل شده',
-        needs_investigation: 'نیاز به بررسی',
-        needs_recabling: 'نیاز به کابل‌کشی مجدد',
-        pending: 'در انتظار نصب',
-        completed: 'تکمیل شده'
-    };
-
-    const activeStatusTranslations = {
-        true: 'فعال',
-        false: 'غیرفعال'
-    };
-
     // --- Element Selectors ---
     const mainContent = document.getElementById('main-content');
     const loginContainer = document.getElementById('login-container');
@@ -141,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tile.style.display = 'block';
             } else {
                 // Show if user's role is in the list of required roles
-                if (requiredRoles.trim().split(' ').includes(userRole)) {
+                if (requiredRoles.split(' ').includes(userRole)) {
                     tile.style.display = 'block';
                 } else {
                     tile.style.display = 'none';
@@ -166,13 +151,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function navigateTo(page, params = {}) {
         appState.currentPage = page;
         pageContent.innerHTML = '<h2><i class="fa-solid fa-spinner fa-spin"></i> در حال بارگذاری...</h2>';
-        const tileMenu = document.getElementById('tile-menu');
-
-        if (page === 'dashboard') {
-            tileMenu.style.display = 'grid';
-        } else {
-            tileMenu.style.display = 'none';
-        }
 
         switch (page) {
             case 'dashboard':
@@ -205,13 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'installer-dashboard':
                 renderInstallerDashboard();
                 break;
-            case 'support-dashboard':
-                renderSupportDashboard();
-                break;
             default:
-                tileMenu.style.display = 'grid'; // Show menu again if page not found
                 pageContent.innerHTML = '<h2>صفحه مورد نظر یافت نشد</h2>';
-                break;
         }
     }
 
@@ -245,10 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
 
         pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>مدیریت مراکز مخابراتی</h2>
-            </div>
+            <h2>مدیریت مراکز مخابراتی</h2>
             <button id="add-new-center-btn">افزودن مرکز جدید</button>
             <div class="table-container">
                 <table>
@@ -267,7 +237,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         // Add event listeners for new buttons
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('add-new-center-btn').addEventListener('click', () => renderAddEditCenterForm());
         pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditCenterForm(e.target.dataset.id)));
         pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteCenter(e.target.dataset.id)));
@@ -286,10 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>${title}</h2>
-            </div>
+            <h2>${title}</h2>
             <form id="center-form">
                 <input type="hidden" name="id" value="${center.id || ''}">
                 <div class="form-group">
@@ -297,11 +263,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="text" id="center-name" name="name" value="${center.name}" required>
                 </div>
                 <button type="submit">ذخیره</button>
+                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
 
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('telecom-centers-management'));
         document.getElementById('center-form').addEventListener('submit', saveCenter);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('telecom-centers-management'));
     }
 
     async function saveCenter(e) {
@@ -334,38 +301,604 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Support Ticket Creation ---
+    // --- CRUD for FATs ---
 
-    function renderCreateTicketForm(subscription_id) {
+    async function renderFatsManagement() {
+        const result = await fetchAPI('api/fats.php');
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری FAT ها</h2>';
+            return;
+        }
+
+        const fats = result.data;
+        let tableRows = fats.map(fat => `
+            <tr>
+                <td>${fat.fat_number}</td>
+                <td>${fat.telecom_center_name}</td>
+                <td>${fat.splitter_type}</td>
+                <td>${fat.occupied_ports} / ${fat.splitter_type.split(':')[1]}</td>
+                <td>${fat.address || 'ثبت نشده'}</td>
+                <td>
+                    <button class="btn-edit" data-id="${fat.id}">ویرایش</button>
+                    <button class="btn-delete danger" data-id="${fat.id}">حذف</button>
+                </td>
+            </tr>
+        `).join('');
+
         pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به لیست اشتراک‌ها"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>ایجاد تیکت پشتیبانی برای اشتراک #${subscription_id}</h2>
-            </div>
-            <form id="create-ticket-form">
-                <input type="hidden" name="subscription_id" value="${subscription_id}">
-                <div class="form-group">
-                    <label for="ticket-title">عنوان تیکت</label>
-                    <input type="text" id="ticket-title" name="title" required>
-                </div>
-                <div class="form-group">
-                    <label for="ticket-description">شرح مشکل</label>
-                    <textarea id="ticket-description" name="description" rows="5" required></textarea>
-                </div>
-                <button type="submit">ایجاد تیکت</button>
-            </form>
+            <h2>مدیریت FAT ها</h2>
+            <button id="add-new-fat-btn">افزودن FAT جدید</button>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                        <th>شماره FAT</th>
+                        <th>مرکز مخابراتی</th>
+                        <th>نوع اسپلیتر</th>
+                        <th>ظرفیت اشغالی</th>
+                        <th>آدرس</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
         `;
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscriptions-management'));
-        document.getElementById('create-ticket-form').addEventListener('submit', saveTicket);
+
+        document.getElementById('add-new-fat-btn').addEventListener('click', () => renderAddEditFatForm());
+        pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditFatForm(e.target.dataset.id)));
+        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteFat(e.target.dataset.id)));
     }
 
-    async function saveTicket(e) {
+    async function renderAddEditFatForm(id = null) {
+        const title = id ? 'ویرایش FAT' : 'افزودن FAT';
+        pageContent.innerHTML = `<h2>${title}</h2><p>در حال بارگذاری فرم...</p>`;
+
+        // Fetch telecom centers for the dropdown
+        const centersResult = await fetchAPI('api/telecom_centers.php');
+        if (!centersResult || centersResult.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا: مراکز مخابراتی یافت نشدند.</h2>';
+            return;
+        }
+        const centersOptions = centersResult.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+        let fat = { id: null, fat_number: '', telecom_center_id: '', latitude: 35.7219, longitude: 51.3347, address: '', splitter_type: '1:8' }; // Default to Tehran
+
+        if (id) {
+            const fatResult = await fetchAPI(`api/fats.php?id=${id}`);
+            if (fatResult && fatResult.status === 'success') {
+                fat = fatResult.data;
+            }
+        }
+
+        pageContent.innerHTML = `
+            <h2>${title}</h2>
+            <form id="fat-form">
+                <input type="hidden" name="id" value="${fat.id || ''}">
+                <div class="form-group">
+                    <label for="fat-number">شماره FAT</label>
+                    <input type="text" id="fat-number" name="fat_number" value="${fat.fat_number}" required>
+                </div>
+                <div class="form-group">
+                    <label for="telecom-center">مرکز مخابراتی</label>
+                    <select id="telecom-center" name="telecom_center_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${centersOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="splitter-type">نوع اسپلیتر</label>
+                    <select id="splitter-type" name="splitter_type" required>
+                        <option value="1:2">1:2</option>
+                        <option value="1:4">1:4</option>
+                        <option value="1:8">1:8</option>
+                        <option value="1:16">1:16</option>
+                        <option value="1:32">1:32</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>موقعیت مکانی</label>
+                    <button type="button" id="use-gps-btn" style="margin-bottom: 10px;">
+                        <i class="fa-solid fa-location-crosshairs"></i> استفاده از موقعیت مکانی من
+                    </button>
+                    <div id="map"></div>
+                </div>
+                 <div class="form-group">
+                    <label for="latitude">عرض جغرافیایی (Latitude)</label>
+                    <input type="text" id="latitude" name="latitude" value="${fat.latitude}" required>
+                </div>
+                 <div class="form-group">
+                    <label for="longitude">طول جغرافیایی (Longitude)</label>
+                    <input type="text" id="longitude" name="longitude" value="${fat.longitude}" required>
+                </div>
+                <div class="form-group">
+                    <label for="address">آدرس</label>
+                    <textarea id="address" name="address" rows="3">${fat.address}</textarea>
+                </div>
+                <button type="submit">ذخیره</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+
+        // Set selected values
+        if (fat.telecom_center_id) document.getElementById('telecom-center').value = fat.telecom_center_id;
+        if (fat.splitter_type) document.getElementById('splitter-type').value = fat.splitter_type;
+
+        initializeMap(fat.latitude, fat.longitude);
+
+        document.getElementById('fat-form').addEventListener('submit', saveFat);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('fats-management'));
+    }
+
+    function initializeMap(lat, lng) {
+        const map = L.map('map').setView([lat, lng], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        let marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+
+        const updateFields = (latlng) => {
+            document.getElementById('latitude').value = latlng.lat;
+            document.getElementById('longitude').value = latlng.lng;
+        };
+
+        marker.on('dragend', function(event) {
+            const position = marker.getLatLng();
+            updateFields(position);
+        });
+
+        map.on('click', function(e) {
+            marker.setLatLng(e.latlng);
+            updateFields(e.latlng);
+        });
+
+        document.getElementById('use-gps-btn').addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                alert('مرورگر شما از موقعیت‌یابی جغرافیایی پشتیبانی نمی‌کند.');
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    const latlng = { lat: latitude, lng: longitude };
+                    map.setView(latlng, 16);
+                    marker.setLatLng(latlng);
+                    updateFields(latlng);
+                },
+                () => {
+                    alert('امکان دریافت موقعیت مکانی شما وجود ندارد. لطفاً دسترسی لازم را به مرورگر بدهید.');
+                }
+            );
+        });
+    }
+
+    async function saveFat(e) {
         e.preventDefault();
         const form = e.target;
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
 
-        const result = await fetchAPI('api/tickets.php', {
+        const endpoint = data.id ? `api/fats.php` : 'api/fats.php';
+        const method = data.id ? 'PUT' : 'POST';
+
+        const result = await fetchAPI(endpoint, {
+            method: method,
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('fats-management');
+        }
+    }
+
+    async function deleteFat(id) {
+        if (confirm('آیا از حذف این FAT و تمام اشتراک‌های مرتبط با آن مطمئن هستید؟')) {
+            const result = await fetchAPI(`api/fats.php?id=${id}`, { method: 'DELETE' });
+             if (result && result.status === 'success') {
+                alert(result.message);
+                navigateTo('fats-management');
+            }
+        }
+    }
+            const position = marker.getLatLng();
+            document.getElementById('latitude').value = position.lat;
+            document.getElementById('longitude').value = position.lng;
+        });
+
+        map.on('click', function(e) {
+            marker.setLatLng(e.latlng);
+            document.getElementById('latitude').value = e.latlng.lat;
+            document.getElementById('longitude').value = e.latlng.lng;
+        });
+    }
+
+    async function saveFat(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const endpoint = data.id ? `api/fats.php` : 'api/fats.php';
+        const method = data.id ? 'PUT' : 'POST';
+
+        const result = await fetchAPI(endpoint, {
+            method: method,
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('fats-management');
+        }
+    }
+
+    async function deleteFat(id) {
+        if (confirm('آیا از حذف این FAT و تمام اشتراک‌های مرتبط با آن مطمئن هستید؟')) {
+            const result = await fetchAPI(`api/fats.php?id=${id}`, { method: 'DELETE' });
+             if (result && result.status === 'success') {
+                alert(result.message);
+                navigateTo('fats-management');
+            }
+        }
+    }
+
+    // --- Reporting ---
+
+    async function renderReportsManagement() {
+        pageContent.innerHTML = `<h2>گزارش‌گیری پیشرفته</h2><p>در حال بارگذاری فیلترها...</p>`;
+
+        const fatsResult = await fetchAPI('api/fats.php');
+        if (!fatsResult || fatsResult.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا: FAT ها یافت نشدند.</h2>';
+            return;
+        }
+        const fatsOptions = fatsResult.data.map(f => `<option value="${f.id}">${f.fat_number}</option>`).join('');
+
+        pageContent.innerHTML = `
+            <h2>گزارش‌گیری پیشرفته</h2>
+            <form id="report-filters-form">
+                <div class="form-group">
+                    <label for="filter-fat">فیلتر بر اساس FAT</label>
+                    <select id="filter-fat" name="fat_id">
+                        <option value="">همه FAT ها</option>
+                        ${fatsOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="filter-status">فیلتر بر اساس وضعیت اشتراک</label>
+                    <select id="filter-status" name="is_active">
+                        <option value="">همه وضعیت‌ها</option>
+                        <option value="1">فعال</option>
+                        <option value="0">غیرفعال</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="filter-start-date">از تاریخ</label>
+                    <input type="text" id="filter-start-date" name="start_date" data-jdp>
+                </div>
+                <div class="form-group">
+                    <label for="filter-end-date">تا تاریخ</label>
+                    <input type="text" id="filter-end-date" name="end_date" data-jdp>
+                </div>
+                <div class="form-group">
+                    <button type="button" id="generate-json-btn">مشاهده گزارش (JSON)</button>
+                    <button type="button" id="generate-csv-btn">دانلود CSV</button>
+                    <button type="button" id="generate-pdf-btn">دانلود PDF</button>
+                </div>
+            </form>
+            <hr>
+            <h3>نتیجه گزارش</h3>
+            <div id="report-results-container">
+                <p>برای مشاهده نتیجه، فیلترها را تنظیم کرده و روی دکمه "مشاهده گزارش" کلیک کنید.</p>
+            </div>
+        `;
+
+        // Initialize Jalali Datepickers
+        jalaliDatepicker.startWatch({
+            selector: '[data-jdp]',
+            time: false,
+        });
+
+        document.getElementById('generate-json-btn').addEventListener('click', () => generateReport('json'));
+        document.getElementById('generate-csv-btn').addEventListener('click', () => generateReport('csv'));
+        document.getElementById('generate-pdf-btn').addEventListener('click', () => generateReport('pdf'));
+    }
+
+    async function generateReport(format) {
+        const form = document.getElementById('report-filters-form');
+        const params = new URLSearchParams();
+        if (form.fat_id.value) params.append('fat_id', form.fat_id.value);
+        if (form.is_active.value) params.append('is_active', form.is_active.value);
+        if (form.start_date.value) params.append('start_date', form.start_date.value);
+        if (form.end_date.value) params.append('end_date', form.end_date.value);
+        params.append('format', format);
+
+        const reportUrl = `api/report.php?${params.toString()}`;
+
+        if (format === 'json') {
+            const resultsContainer = document.getElementById('report-results-container');
+            resultsContainer.innerHTML = '<p>در حال دریافت اطلاعات...</p>';
+            const result = await fetchAPI(reportUrl);
+            if (result && result.status === 'success') {
+                if (result.data.length === 0) {
+                     resultsContainer.innerHTML = '<p>هیچ نتیجه‌ای برای این فیلترها یافت نشد.</p>';
+                     return;
+                }
+                const headers = Object.keys(result.data[0]);
+                const tableHeaders = headers.map(key => `<th>${key.replace(/_/g, ' ')}</th>`).join('');
+
+                const tableRows = result.data.map(row => {
+                    const cells = headers.map(header => `<td>${row[header] !== null ? row[header] : ''}</td>`).join('');
+                    return `<tr>${cells}</tr>`;
+                }).join('');
+
+                resultsContainer.innerHTML = `
+                    <div class="table-container">
+                        <table class="report-table">
+                            <thead><tr>${tableHeaders}</tr></thead>
+                            <tbody>${tableRows}</tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                 resultsContainer.innerHTML = '<p>خطا در دریافت گزارش.</p>';
+            }
+        } else {
+            // For CSV and PDF, trigger a download by opening the URL
+            window.open(reportUrl, '_blank');
+        }
+    }
+
+    // --- CRUD for Subscribers ---
+
+    async function renderSubscribersManagement() {
+        const result = await fetchAPI('api/subscribers.php');
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری مشترکین</h2>';
+            return;
+        }
+
+        const subscribers = result.data;
+        let tableRows = subscribers.map(s => `
+            <tr>
+                <td>${s.full_name}</td>
+                <td>${s.mobile_number}</td>
+                <td>${s.national_id || 'ثبت نشده'}</td>
+                <td>
+                    <button class="btn-edit" data-id="${s.id}">ویرایش</button>
+                    <button class="btn-delete danger" data-id="${s.id}">حذف</button>
+                </td>
+            </tr>
+        `).join('');
+
+        pageContent.innerHTML = `
+            <h2>مدیریت مشترکین</h2>
+            <button id="add-new-subscriber-btn">افزودن مشترک جدید</button>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                        <th>نام کامل</th>
+                        <th>شماره موبایل</th>
+                        <th>کد ملی</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+        `;
+
+        document.getElementById('add-new-subscriber-btn').addEventListener('click', () => renderAddEditSubscriberForm());
+        pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditSubscriberForm(e.target.dataset.id)));
+        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteSubscriber(e.target.dataset.id)));
+    }
+
+    async function renderAddEditSubscriberForm(id = null) {
+        let subscriber = { id: null, full_name: '', mobile_number: '', national_id: '' };
+        const title = id ? 'ویرایش مشترک' : 'افزودن مشترک';
+
+        if (id) {
+            const result = await fetchAPI(`api/subscribers.php?id=${id}`);
+            if (result && result.status === 'success') {
+                subscriber = result.data;
+            }
+        }
+
+        pageContent.innerHTML = `
+            <h2>${title}</h2>
+            <form id="subscriber-form">
+                <input type="hidden" name="id" value="${subscriber.id || ''}">
+                <div class="form-group">
+                    <label for="full-name">نام کامل</label>
+                    <input type="text" id="full-name" name="full_name" value="${subscriber.full_name}" required>
+                </div>
+                <div class="form-group">
+                    <label for="mobile-number">شماره موبایل</label>
+                    <input type="text" id="mobile-number" name="mobile_number" value="${subscriber.mobile_number}" required pattern="^09[0-9]{9}$" title="شماره موبایل باید با 09 شروع شده و 11 رقم باشد">
+                </div>
+                <div class="form-group">
+                    <label for="national-id">کد ملی (اختیاری)</label>
+                    <input type="text" id="national-id" name="national_id" value="${subscriber.national_id || ''}" pattern="^[0-9]{10}$" title="کد ملی باید 10 رقم باشد">
+                </div>
+                <button type="submit">ذخیره</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+
+        document.getElementById('subscriber-form').addEventListener('submit', saveSubscriber);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscribers-management'));
+    }
+
+    async function saveSubscriber(e) {
+        e.preventDefault();
+        const form = e.target;
+        if (!form.checkValidity()) {
+            alert('لطفاً اطلاعات فرم را به درستی وارد کنید.');
+            return;
+        }
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        const endpoint = data.id ? `api/subscribers.php` : 'api/subscribers.php';
+        const method = data.id ? 'PUT' : 'POST';
+
+        const result = await fetchAPI(endpoint, {
+            method: method,
+            body: data
+        });
+
+        if (result && result.status === 'success') {
+            alert(result.message);
+            navigateTo('subscribers-management');
+        }
+    }
+
+    async function deleteSubscriber(id) {
+        if (confirm('آیا از حذف این مشترک و تمام اشتراک‌های مرتبط با آن مطمئن هستید؟')) {
+            const result = await fetchAPI(`api/subscribers.php?id=${id}`, { method: 'DELETE' });
+             if (result && result.status === 'success') {
+                alert(result.message);
+                navigateTo('subscribers-management');
+            }
+        }
+    }
+
+    // --- CRUD for Subscriptions ---
+
+    async function renderSubscriptionsManagement() {
+        const result = await fetchAPI('api/subscriptions.php');
+        if (!result || result.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا در بارگذاری اشتراک‌ها</h2>';
+            return;
+        }
+
+        const subscriptions = result.data;
+        let tableRows = subscriptions.map(sub => `
+            <tr>
+                <td>${sub.subscriber_name}</td>
+                <td>${sub.fat_number}</td>
+                <td>${sub.port_number}</td>
+                <td>${sub.virtual_subscriber_number}</td>
+                <td>${sub.is_active ? '<span style="color:green;">فعال</span>' : '<span style="color:red;">غیرفعال</span>'}</td>
+                <td>
+                    <button class="btn-delete danger" data-id="${sub.id}">حذف</button>
+                </td>
+            </tr>
+        `).join('');
+
+        pageContent.innerHTML = `
+            <h2>مدیریت اشتراک‌ها</h2>
+            <button id="add-new-subscription-btn">افزودن اشتراک جدید</button>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                        <th>نام مشترک</th>
+                        <th>شماره FAT</th>
+                        <th>شماره پورت</th>
+                        <th>شماره اشتراک مجازی</th>
+                        <th>وضعیت</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+        `;
+
+        document.getElementById('add-new-subscription-btn').addEventListener('click', () => renderAddEditSubscriptionForm());
+        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteSubscription(e.target.dataset.id)));
+    }
+
+    async function renderAddEditSubscriptionForm(id = null) {
+        // Note: Editing subscriptions is complex (e.g., changing port). This form focuses on adding.
+        const title = 'افزودن اشتراک جدید';
+        pageContent.innerHTML = `<h2>${title}</h2><p>در حال بارگذاری فرم...</p>`;
+
+        // Fetch subscribers and FATs in parallel
+        const [subscribersResult, fatsResult] = await Promise.all([
+            fetchAPI('api/subscribers.php'),
+            fetchAPI('api/fats.php')
+        ]);
+
+        if (!subscribersResult || subscribersResult.status !== 'success' || !fatsResult || fatsResult.status !== 'success') {
+            pageContent.innerHTML = '<h2>خطا: مشترکین یا FAT ها یافت نشدند.</h2>';
+            return;
+        }
+
+        const subscribersOptions = subscribersResult.data.map(s => `<option value="${s.id}">${s.full_name} (${s.mobile_number})</option>`).join('');
+        const fatsOptions = fatsResult.data.map(f => `<option value="${f.id}" data-capacity="${f.splitter_type.split(':')[1]}">${f.fat_number}</option>`).join('');
+
+        pageContent.innerHTML = `
+            <h2>${title}</h2>
+            <form id="subscription-form">
+                <div class="form-group">
+                    <label for="subscriber-id">مشترک</label>
+                    <select id="subscriber-id" name="subscriber_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${subscribersOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="fat-id">FAT</label>
+                    <select id="fat-id" name="fat_id" required>
+                        <option value="">انتخاب کنید...</option>
+                        ${fatsOptions}
+                    </select>
+                    <small id="fat-capacity-info"></small>
+                </div>
+                <div class="form-group">
+                    <label for="port-number">شماره پورت</label>
+                    <input type="number" id="port-number" name="port_number" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="virtual-subscriber-number">شماره اشتراک مجازی</label>
+                    <input type="text" id="virtual-subscriber-number" name="virtual_subscriber_number" required>
+                </div>
+                 <div class="form-group">
+                    <label>
+                        <input type="checkbox" name="is_active" checked>
+                        فعال باشد
+                    </label>
+                </div>
+                <button type="submit">ذخیره</button>
+                <button type="button" id="cancel-btn">انصراف</button>
+            </form>
+        `;
+
+        // Add event listener to show FAT capacity
+        const fatSelect = document.getElementById('fat-id');
+        fatSelect.addEventListener('change', async (e) => {
+            const selectedOption = e.target.options[e.target.selectedIndex];
+            const capacity = selectedOption.dataset.capacity;
+            const fatId = e.target.value;
+            if (!fatId) {
+                document.getElementById('fat-capacity-info').textContent = '';
+                return;
+            }
+            const fatInfo = await fetchAPI(`api/fats.php?id=${fatId}`);
+            const occupied = fatInfo.data.occupied_ports;
+            document.getElementById('fat-capacity-info').textContent = `ظرفیت: ${occupied} / ${capacity}`;
+        });
+
+        document.getElementById('subscription-form').addEventListener('submit', saveSubscription);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscriptions-management'));
+    }
+
+    async function saveSubscription(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        data.is_active = form.is_active.checked;
+
+        const result = await fetchAPI('api/subscriptions.php', {
             method: 'POST',
             body: data
         });
@@ -390,7 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${ticket.id}</td>
                     <td>${ticket.title}</td>
                     <td>${ticket.subscriber_name}</td>
-                    <td><span class="status-${ticket.status}">${statusTranslations[ticket.status] || ticket.status}</span></td>
+                    <td><span class="status-open">باز</span></td>
                     <td>${new Date(ticket.created_at).toLocaleDateString('fa-IR')}</td>
                     <td><button class="btn-assign-support" data-id="${ticket.id}">ارجاع به پشتیبان</button></td>
                 </tr>
@@ -491,801 +1024,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Support UI ---
-
-    async function renderSupportDashboard() {
-        pageContent.innerHTML = `<h2>داشبورد پشتیبانی</h2><p>در حال بارگذاری تیکت‌های شما...</p>`;
-        const result = await fetchAPI('api/assignments.php'); // GET request will be filtered by role on backend
-
-        if (!result || result.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا در بارگذاری لیست کارها</h2>';
-            return;
-        }
-
-        const tickets = result.data;
-        if (tickets.length === 0) {
-            pageContent.innerHTML = '<h2>داشبورد پشتیبانی</h2><p>در حال حاضر هیچ تیکتی به شما ارجاع داده نشده است.</p>';
-            return;
-        }
-
-        let tableRows = tickets.map(t => {
-            const is_resolved = t.status === 'resolved';
-            const report_button = !is_resolved
-                ? `<button class="btn-report" data-id="${t.id}">ثبت گزارش و تغییر وضعیت</button>`
-                : 'گزارش ثبت شده';
-            return `
-                <tr>
-                    <td>${t.id}</td>
-                    <td>${t.title}</td>
-                    <td>${t.subscriber_name}</td>
-                    <td><span class="status-${t.status}">${statusTranslations[t.status] || t.status}</span></td>
-                    <td>${report_button}</td>
-                </tr>
-            `;
-        }).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>تیکت‌های ارجاع شده به شما</h2>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>شناسه تیکت</th>
-                            <th>عنوان</th>
-                            <th>نام مشترک</th>
-                            <th>وضعیت</th>
-                            <th>عملیات</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRows}
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
-        pageContent.querySelectorAll('.btn-report').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const ticketId = e.currentTarget.dataset.id;
-                renderTicketUpdateForm(ticketId);
-            });
-        });
-    }
-
-    function renderTicketUpdateForm(ticket_id) {
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد پشتیبانی"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>ثبت گزارش برای تیکت #${ticket_id}</h2>
-            </div>
-            <form id="support-report-form">
-                <input type="hidden" name="type" value="support">
-                <input type="hidden" name="target_id" value="${ticket_id}">
-
-                <div class="form-group">
-                    <label for="ticket-status">تغییر وضعیت به:</label>
-                    <select id="ticket-status" name="status" required>
-                        <option value="resolved">حل شده</option>
-                        <option value="needs_investigation">نیاز به بررسی بیشتر</option>
-                        <option value="needs_recabling">نیاز به کابل‌کشی مجدد</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="notes">گزارش اقدامات و توضیحات</label>
-                    <textarea id="notes" name="notes" rows="5" required></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label>لوازم مصرفی (اختیاری)</label>
-                    <textarea name="materials_used" rows="3" placeholder="مثال: 2 عدد کانکتور، 1 عدد پیگتیل"></textarea>
-                </div>
-
-                <button type="submit">ثبت گزارش</button>
-            </form>
-        `;
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('support-dashboard'));
-        document.getElementById('support-report-form').addEventListener('submit', saveSupportReport);
-    }
-
-    async function saveSupportReport(e) {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        // Value is now plain text, no parsing needed.
-        if (!data.materials_used.trim()) {
-            delete data.materials_used; // Remove if empty
-        }
-
-        const result = await fetchAPI('api/workflow_reports.php', { method: 'POST', body: data });
-
-        if (result && result.status === 'success') {
-            alert(result.message);
-            navigateTo('support-dashboard');
-        }
-    }
-
-
-
-    // --- CRUD for FATs ---
-
-    async function renderFatsManagement() {
-        const result = await fetchAPI('api/fats.php');
-        if (!result || result.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا در بارگذاری FAT ها</h2>';
-            return;
-        }
-
-        const fats = result.data;
-        let tableRows = fats.map(fat => `
-            <tr>
-                <td>${fat.fat_number}</td>
-                <td>${fat.telecom_center_name}</td>
-                <td>${fat.splitter_type}</td>
-                <td>${fat.occupied_ports} / ${fat.splitter_type.split(':')[1]}</td>
-                <td>${fat.address || 'ثبت نشده'}</td>
-                <td>
-                    <button class="btn-edit" data-id="${fat.id}">ویرایش</button>
-                    <button class="btn-delete danger" data-id="${fat.id}">حذف</button>
-                </td>
-            </tr>
-        `).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>مدیریت FAT ها</h2>
-            </div>
-            <button id="add-new-fat-btn">افزودن FAT جدید</button>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                        <th>شماره FAT</th>
-                        <th>مرکز مخابراتی</th>
-                        <th>نوع اسپلیتر</th>
-                        <th>ظرفیت اشغالی</th>
-                        <th>آدرس</th>
-                        <th>عملیات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
-        `;
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
-        document.getElementById('add-new-fat-btn').addEventListener('click', () => renderAddEditFatForm());
-        pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditFatForm(e.target.dataset.id)));
-        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteFat(e.target.dataset.id)));
-    }
-
-    async function renderAddEditFatForm(id = null) {
-        const title = id ? 'ویرایش FAT' : 'افزودن FAT';
-        pageContent.innerHTML = `<h2>${title}</h2><p>در حال بارگذاری فرم...</p>`;
-
-        // Fetch telecom centers for the dropdown
-        const centersResult = await fetchAPI('api/telecom_centers.php');
-        if (!centersResult || centersResult.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا: مراکز مخابراتی یافت نشدند.</h2>';
-            return;
-        }
-        const centersOptions = centersResult.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-
-        let fat = { id: null, fat_number: '', telecom_center_id: '', latitude: 35.7219, longitude: 51.3347, address: '', splitter_type: '1:8' }; // Default to Tehran
-
-        if (id) {
-            const fatResult = await fetchAPI(`api/fats.php?id=${id}`);
-            if (fatResult && fatResult.status === 'success') {
-                fat = fatResult.data;
-            }
-        }
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>${title}</h2>
-            </div>
-            <form id="fat-form">
-                <input type="hidden" name="id" value="${fat.id || ''}">
-                <div class="form-group">
-                    <label for="fat-number">شماره FAT</label>
-                    <input type="text" id="fat-number" name="fat_number" value="${fat.fat_number}" required>
-                </div>
-                <div class="form-group">
-                    <label for="telecom-center">مرکز مخابراتی</label>
-                    <select id="telecom-center" name="telecom_center_id" required>
-                        <option value="">انتخاب کنید...</option>
-                        ${centersOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="splitter-type">نوع اسپلیتر</label>
-                    <select id="splitter-type" name="splitter_type" required>
-                        <option value="1:2">1:2</option>
-                        <option value="1:4">1:4</option>
-                        <option value="1:8">1:8</option>
-                        <option value="1:16">1:16</option>
-                        <option value="1:32">1:32</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>موقعیت مکانی</label>
-                    <button type="button" id="use-gps-btn" style="margin-bottom: 10px;">
-                        <i class="fa-solid fa-location-crosshairs"></i> استفاده از موقعیت مکانی من
-                    </button>
-                    <div id="map"></div>
-                </div>
-                 <div class="form-group">
-                    <label for="latitude">عرض جغرافیایی (Latitude)</label>
-                    <input type="text" id="latitude" name="latitude" value="${fat.latitude}" required>
-                </div>
-                 <div class="form-group">
-                    <label for="longitude">طول جغرافیایی (Longitude)</label>
-                    <input type="text" id="longitude" name="longitude" value="${fat.longitude}" required>
-                </div>
-                <div class="form-group">
-                    <label for="address">آدرس</label>
-                    <textarea id="address" name="address" rows="3">${fat.address}</textarea>
-                </div>
-                <button type="submit">ذخیره</button>
-            </form>
-        `;
-
-        // Set selected values
-        if (fat.telecom_center_id) document.getElementById('telecom-center').value = fat.telecom_center_id;
-        if (fat.splitter_type) document.getElementById('splitter-type').value = fat.splitter_type;
-
-        initializeMap(fat.latitude, fat.longitude);
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('fats-management'));
-        document.getElementById('fat-form').addEventListener('submit', saveFat);
-    }
-
-    function initializeMap(lat, lng) {
-        const map = L.map('map').setView([lat, lng], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
-        let marker = L.marker([lat, lng], { draggable: true }).addTo(map);
-
-        const updateFields = (latlng) => {
-            document.getElementById('latitude').value = latlng.lat;
-            document.getElementById('longitude').value = latlng.lng;
-        };
-
-        marker.on('dragend', function(event) {
-            const position = marker.getLatLng();
-            updateFields(position);
-        });
-
-        map.on('click', function(e) {
-            marker.setLatLng(e.latlng);
-            updateFields(e.latlng);
-        });
-
-        document.getElementById('use-gps-btn').addEventListener('click', () => {
-            if (!navigator.geolocation) {
-                alert('مرورگر شما از موقعیت‌یابی جغرافیایی پشتیبانی نمی‌کند.');
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    const latlng = { lat: latitude, lng: longitude };
-                    map.setView(latlng, 16);
-                    marker.setLatLng(latlng);
-                    updateFields(latlng);
-                },
-                () => {
-                    alert('امکان دریافت موقعیت مکانی شما وجود ندارد. لطفاً دسترسی لازم را به مرورگر بدهید.');
-                }
-            );
-        });
-    }
-
-    async function saveFat(e) {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        const endpoint = data.id ? `api/fats.php` : 'api/fats.php';
-        const method = data.id ? 'PUT' : 'POST';
-
-        const result = await fetchAPI(endpoint, {
-            method: method,
-            body: data
-        });
-
-        if (result && result.status === 'success') {
-            alert(result.message);
-            navigateTo('fats-management');
-        }
-    }
-
-    async function deleteFat(id) {
-        if (confirm('آیا از حذف این FAT و تمام اشتراک‌های مرتبط با آن مطمئن هستید؟')) {
-            const result = await fetchAPI(`api/fats.php?id=${id}`, { method: 'DELETE' });
-             if (result && result.status === 'success') {
-                alert(result.message);
-                navigateTo('fats-management');
-            }
-        }
-    }
-
-    // --- Reporting ---
-
-    async function renderReportsManagement() {
-        pageContent.innerHTML = `<h2>گزارش‌گیری پیشرفته</h2><p>در حال بارگذاری فیلترها...</p>`;
-
-        const fatsResult = await fetchAPI('api/fats.php');
-        if (!fatsResult || fatsResult.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا: FAT ها یافت نشدند.</h2>';
-            return;
-        }
-        const fatsOptions = fatsResult.data.map(f => `<option value="${f.id}">${f.fat_number}</option>`).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>گزارش‌گیری پیشرفته</h2>
-            </div>
-            <form id="report-filters-form">
-                <div class="form-group">
-                    <label for="filter-fat">فیلتر بر اساس FAT</label>
-                    <select id="filter-fat" name="fat_id">
-                        <option value="">همه FAT ها</option>
-                        ${fatsOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="filter-status">فیلتر بر اساس وضعیت اشتراک</label>
-                    <select id="filter-status" name="is_active">
-                        <option value="">همه وضعیت‌ها</option>
-                        <option value="1">فعال</option>
-                        <option value="0">غیرفعال</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="filter-start-date">از تاریخ</label>
-                    <input type="text" id="filter-start-date" name="start_date" data-jdp>
-                </div>
-                <div class="form-group">
-                    <label for="filter-end-date">تا تاریخ</label>
-                    <input type="text" id="filter-end-date" name="end_date" data-jdp>
-                </div>
-                <div class="form-group">
-                    <button type="button" id="generate-json-btn">مشاهده گزارش (JSON)</button>
-                    <button type="button" id="generate-csv-btn">دانلود CSV</button>
-                    <button type="button" id="generate-pdf-btn">دانلود PDF</button>
-                </div>
-            </form>
-            <hr>
-            <h3>نتیجه گزارش</h3>
-            <div id="report-results-container">
-                <p>برای مشاهده نتیجه، فیلترها را تنظیم کرده و روی دکمه "مشاهده گزارش" کلیک کنید.</p>
-            </div>
-        `;
-
-        // Initialize Jalali Datepickers
-        jalaliDatepicker.startWatch({
-            selector: '[data-jdp]',
-            time: false,
-        });
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
-        document.getElementById('generate-json-btn').addEventListener('click', () => generateReport('json'));
-        document.getElementById('generate-csv-btn').addEventListener('click', () => generateReport('csv'));
-        document.getElementById('generate-pdf-btn').addEventListener('click', () => generateReport('pdf'));
-    }
-
-    async function generateReport(format) {
-        const form = document.getElementById('report-filters-form');
-        const params = new URLSearchParams();
-        if (form.fat_id.value) params.append('fat_id', form.fat_id.value);
-        if (form.is_active.value) params.append('is_active', form.is_active.value);
-        if (form.start_date.value) params.append('start_date', form.start_date.value);
-        if (form.end_date.value) params.append('end_date', form.end_date.value);
-        params.append('format', format);
-
-        const reportUrl = `api/report.php?${params.toString()}`;
-
-        if (format === 'json') {
-            const resultsContainer = document.getElementById('report-results-container');
-            resultsContainer.innerHTML = '<p>در حال دریافت اطلاعات...</p>';
-            const result = await fetchAPI(reportUrl);
-            if (result && result.status === 'success') {
-                if (result.data.length === 0) {
-                     resultsContainer.innerHTML = '<p>هیچ نتیجه‌ای برای این فیلترها یافت نشد.</p>';
-                     return;
-                }
-                const headers = Object.keys(result.data[0]);
-                const tableHeaders = headers.map(key => `<th>${key.replace(/_/g, ' ')}</th>`).join('');
-
-                const tableRows = result.data.map(row => {
-                    const cells = headers.map(header => `<td>${row[header] !== null ? row[header] : ''}</td>`).join('');
-                    return `<tr>${cells}</tr>`;
-                }).join('');
-
-                resultsContainer.innerHTML = `
-                    <div class="table-container">
-                        <table class="report-table">
-                            <thead><tr>${tableHeaders}</tr></thead>
-                            <tbody>${tableRows}</tbody>
-                        </table>
-                    </div>
-                `;
-            } else {
-                 resultsContainer.innerHTML = '<p>خطا در دریافت گزارش.</p>';
-            }
-        } else {
-            // For CSV and PDF, trigger a download by opening the URL
-            window.open(reportUrl, '_blank');
-        }
-    }
-
-    // --- CRUD for Subscribers ---
-
-    async function renderSubscribersManagement() {
-        const result = await fetchAPI('api/subscribers.php');
-        if (!result || result.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا در بارگذاری مشترکین</h2>';
-            return;
-        }
-
-        const subscribers = result.data;
-        let tableRows = subscribers.map(s => `
-            <tr>
-                <td>${s.full_name}</td>
-                <td>${s.mobile_number}</td>
-                <td>${s.national_id || 'ثبت نشده'}</td>
-                <td>
-                    <button class="btn-edit" data-id="${s.id}">ویرایش</button>
-                    <button class="btn-delete danger" data-id="${s.id}">حذف</button>
-                </td>
-            </tr>
-        `).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>مدیریت مشترکین</h2>
-            </div>
-            <button id="add-new-subscriber-btn">افزودن مشترک جدید</button>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                        <th>نام کامل</th>
-                        <th>شماره موبایل</th>
-                        <th>کد ملی</th>
-                        <th>عملیات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
-        `;
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
-        document.getElementById('add-new-subscriber-btn').addEventListener('click', () => renderAddEditSubscriberForm());
-        pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditSubscriberForm(e.target.dataset.id)));
-        pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteSubscriber(e.target.dataset.id)));
-    }
-
-    async function renderAddEditSubscriberForm(id = null) {
-        let subscriber = { id: null, full_name: '', mobile_number: '', national_id: '' };
-        const title = id ? 'ویرایش مشترک' : 'افزودن مشترک';
-
-        if (id) {
-            const result = await fetchAPI(`api/subscribers.php?id=${id}`);
-            if (result && result.status === 'success') {
-                subscriber = result.data;
-            }
-        }
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>${title}</h2>
-            </div>
-            <form id="subscriber-form">
-                <input type="hidden" name="id" value="${subscriber.id || ''}">
-                <div class="form-group">
-                    <label for="full-name">نام کامل</label>
-                    <input type="text" id="full-name" name="full_name" value="${subscriber.full_name}" required>
-                </div>
-                <div class="form-group">
-                    <label for="mobile-number">شماره موبایل</label>
-                    <input type="text" id="mobile-number" name="mobile_number" value="${subscriber.mobile_number}" required pattern="^09[0-9]{9}$" title="شماره موبایل باید با 09 شروع شده و 11 رقم باشد">
-                </div>
-                <div class="form-group">
-                    <label for="national-id">کد ملی (اختیاری)</label>
-                    <input type="text" id="national-id" name="national_id" value="${subscriber.national_id || ''}" pattern="^[0-9]{10}$" title="کد ملی باید 10 رقم باشد">
-                </div>
-                <button type="submit">ذخیره</button>
-            </form>
-        `;
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscribers-management'));
-        document.getElementById('subscriber-form').addEventListener('submit', saveSubscriber);
-    }
-
-    async function saveSubscriber(e) {
-        e.preventDefault();
-        const form = e.target;
-        if (!form.checkValidity()) {
-            alert('لطفاً اطلاعات فرم را به درستی وارد کنید.');
-            return;
-        }
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        const endpoint = data.id ? `api/subscribers.php` : 'api/subscribers.php';
-        const method = data.id ? 'PUT' : 'POST';
-
-        const result = await fetchAPI(endpoint, {
-            method: method,
-            body: data
-        });
-
-        if (result && result.status === 'success') {
-            alert(result.message);
-            navigateTo('subscribers-management');
-        }
-    }
-
-    async function deleteSubscriber(id) {
-        if (confirm('آیا از حذف این مشترک و تمام اشتراک‌های مرتبط با آن مطمئن هستید؟')) {
-            const result = await fetchAPI(`api/subscribers.php?id=${id}`, { method: 'DELETE' });
-             if (result && result.status === 'success') {
-                alert(result.message);
-                navigateTo('subscribers-management');
-            }
-        }
-    }
-
-    // --- CRUD for Subscriptions ---
-
-    async function renderSubscriptionsManagement() {
-        const result = await fetchAPI('api/subscriptions.php');
-        if (!result || result.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا در بارگذاری اشتراک‌ها</h2>';
-            return;
-        }
-
-        const subscriptions = result.data;
-        let tableRows = subscriptions.map(sub => {
-            let actions = '';
-            if (sub.installation_status === 'pending') {
-                actions = `<button class="btn-assign-install" data-id="${sub.id}" title="ارجاع نصب"><i class="fa-solid fa-screwdriver-wrench"></i></button>`;
-            } else if (sub.is_active) {
-                actions = `<button class="btn-support" data-id="${sub.id}" title="ایجاد تیکت پشتیبانی"><i class="fa-solid fa-headset"></i></button>`;
-            }
-            // Always add the delete button
-            actions += ` <button class="btn-delete danger" data-id="${sub.id}" title="حذف اشتراک"><i class="fa-solid fa-trash"></i></button>`;
-
-            return `
-                <tr>
-                    <td>${sub.subscriber_name}</td>
-                    <td>${sub.fat_number}</td>
-                    <td>${sub.port_number}</td>
-                    <td>${sub.virtual_subscriber_number}</td>
-                    <td><span class="status-${sub.installation_status}">${statusTranslations[sub.installation_status] || sub.installation_status}</span></td>
-                    <td><span style="color:${sub.is_active ? 'green' : 'red'};">${activeStatusTranslations[sub.is_active]}</span></td>
-                    <td>${actions}</td>
-                </tr>
-            `;
-        }).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>مدیریت اشتراک‌ها</h2>
-            </div>
-            <button id="add-new-subscription-btn">افزودن اشتراک جدید</button>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                        <th>نام مشترک</th>
-                        <th>شماره FAT</th>
-                        <th>شماره پورت</th>
-                        <th>شماره اشتراک مجازی</th>
-                        <th>وضعیت نصب</th>
-                        <th>وضعیت فعالی</th>
-                        <th>عملیات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
-        `;
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
-        document.getElementById('add-new-subscription-btn').addEventListener('click', () => renderAddEditSubscriptionForm());
-
-        pageContent.querySelectorAll('.btn-assign-install').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const subId = e.currentTarget.dataset.id;
-                renderAssignInstallationForm(subId);
-            });
-        });
-
-        pageContent.querySelectorAll('.btn-support').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const subId = e.currentTarget.dataset.id;
-                renderCreateTicketForm(subId);
-            });
-        });
-
-        pageContent.querySelectorAll('.btn-delete').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const subId = e.currentTarget.dataset.id;
-                deleteSubscription(subId);
-            });
-        });
-    }
-
-    async function renderAssignInstallationForm(subscriptionId) {
-        const userRoleName = 'نصاب';
-        pageContent.innerHTML = `<h2>ارجاع نصب برای اشتراک #${subscriptionId}</h2><p>در حال بارگذاری لیست کاربران...</p>`;
-
-        const usersResult = await fetchAPI(`api/users.php?role=installer`);
-        if (!usersResult || usersResult.status !== 'success' || usersResult.data.length === 0) {
-            pageContent.innerHTML = `<h2>خطا: هیچ کاربر «${userRoleName}» برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
-            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('subscriptions-management'));
-            return;
-        }
-
-        const usersOptions = usersResult.data.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به لیست اشتراک‌ها"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>ارجاع نصب اشتراک #${subscriptionId}</h2>
-            </div>
-            <form id="assign-install-form">
-                <input type="hidden" name="target_id" value="${subscriptionId}">
-                <input type="hidden" name="type" value="installation">
-                <div class="form-group">
-                    <label for="user-id">کاربر ${userRoleName}</label>
-                    <select id="user-id" name="user_id" required>
-                        <option value="">انتخاب کنید...</option>
-                        ${usersOptions}
-                    </select>
-                </div>
-                <button type="submit">ارجاع نصب</button>
-            </form>
-        `;
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscriptions-management'));
-        document.getElementById('assign-install-form').addEventListener('submit', assignInstallation);
-    }
-
-    async function assignInstallation(e) {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        const result = await fetchAPI('api/assignments.php', {
-            method: 'POST',
-            body: data
-        });
-
-        if (result && result.status === 'success') {
-            alert(result.message);
-            navigateTo('subscriptions-management');
-        }
-    }
-
-    async function renderAddEditSubscriptionForm(id = null) {
-        // Note: Editing subscriptions is complex (e.g., changing port). This form focuses on adding.
-        const title = 'افزودن اشتراک جدید';
-        pageContent.innerHTML = `<h2>${title}</h2><p>در حال بارگذاری فرم...</p>`;
-
-        // Fetch subscribers and FATs in parallel
-        const [subscribersResult, fatsResult] = await Promise.all([
-            fetchAPI('api/subscribers.php'),
-            fetchAPI('api/fats.php')
-        ]);
-
-        if (!subscribersResult || subscribersResult.status !== 'success' || !fatsResult || fatsResult.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا: مشترکین یا FAT ها یافت نشدند.</h2>';
-            return;
-        }
-
-        const subscribersOptions = subscribersResult.data.map(s => `<option value="${s.id}">${s.full_name} (${s.mobile_number})</option>`).join('');
-        const fatsOptions = fatsResult.data.map(f => `<option value="${f.id}" data-capacity="${f.splitter_type.split(':')[1]}">${f.fat_number}</option>`).join('');
-
-        pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>${title}</h2>
-            </div>
-            <form id="subscription-form">
-                <div class="form-group">
-                    <label for="subscriber-id">مشترک</label>
-                    <select id="subscriber-id" name="subscriber_id" required>
-                        <option value="">انتخاب کنید...</option>
-                        ${subscribersOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="fat-id">FAT</label>
-                    <select id="fat-id" name="fat_id" required>
-                        <option value="">انتخاب کنید...</option>
-                        ${fatsOptions}
-                    </select>
-                    <small id="fat-capacity-info"></small>
-                </div>
-                <div class="form-group">
-                    <label for="port-number">شماره پورت</label>
-                    <input type="number" id="port-number" name="port_number" min="1" required>
-                </div>
-                <div class="form-group">
-                    <label for="virtual-subscriber-number">شماره اشتراک مجازی</label>
-                    <input type="text" id="virtual-subscriber-number" name="virtual_subscriber_number" required>
-                </div>
-                 <div class="form-group">
-                    <label>
-                        <input type="checkbox" name="is_active" checked>
-                        فعال باشد
-                    </label>
-                </div>
-                <button type="submit">ذخیره</button>
-            </form>
-        `;
-
-        // Add event listener to show FAT capacity
-        const fatSelect = document.getElementById('fat-id');
-        fatSelect.addEventListener('change', async (e) => {
-            const selectedOption = e.target.options[e.target.selectedIndex];
-            const capacity = selectedOption.dataset.capacity;
-            const fatId = e.target.value;
-            if (!fatId) {
-                document.getElementById('fat-capacity-info').textContent = '';
-                return;
-            }
-            const fatInfo = await fetchAPI(`api/fats.php?id=${fatId}`);
-            const occupied = fatInfo.data.occupied_ports;
-            document.getElementById('fat-capacity-info').textContent = `ظرفیت: ${occupied} / ${capacity}`;
-        });
-
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('subscriptions-management'));
-        document.getElementById('subscription-form').addEventListener('submit', saveSubscription);
-    }
-
-    async function saveSubscription(e) {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-        data.is_active = form.is_active.checked;
-
-        const result = await fetchAPI('api/subscriptions.php', {
-            method: 'POST',
-            body: data
-        });
-
-        if (result && result.status === 'success') {
-            alert(result.message);
-            navigateTo('subscriptions-management');
-        }
-    }
-
     async function deleteSubscription(id) {
         if (confirm('آیا از حذف این اشتراک مطمئن هستید؟')) {
             const result = await fetchAPI(`api/subscriptions.php?id=${id}`, { method: 'DELETE' });
@@ -1318,10 +1056,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
 
         pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>مدیریت شرکت‌ها</h2>
-            </div>
+            <h2>مدیریت شرکت‌ها</h2>
             <button id="add-new-company-btn">افزودن شرکت جدید</button>
             <table>
                 <thead>
@@ -1337,7 +1072,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </table>
         `;
 
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         document.getElementById('add-new-company-btn').addEventListener('click', () => renderAddEditCompanyForm());
         pageContent.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => renderAddEditCompanyForm(e.target.dataset.id)));
         pageContent.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => deleteCompany(e.target.dataset.id)));
@@ -1355,10 +1089,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به لیست"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>${title}</h2>
-            </div>
+            <h2>${title}</h2>
             <form id="company-form">
                 <input type="hidden" name="id" value="${company.id || ''}">
                 <div class="form-group">
@@ -1370,12 +1101,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="text" id="expires-at" name="expires_at" value="${company.expires_at ? company.expires_at.split(' ')[0] : ''}" data-jdp>
                 </div>
                 <button type="submit">ذخیره</button>
+                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
 
         jalaliDatepicker.startWatch({ selector: '[data-jdp]', time: false });
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('companies-management'));
         document.getElementById('company-form').addEventListener('submit', saveCompany);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('companies-management'));
     }
 
     async function saveCompany(e) {
@@ -1444,7 +1176,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 tableBody.appendChild(row);
             });
 
-            pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
             document.getElementById('add-new-user-btn').addEventListener('click', () => renderAddUserForm());
         });
     }
@@ -1475,8 +1206,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const roleSelect = document.getElementById('user-role');
             roleSelect.innerHTML = roleOptions;
 
-            pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('users-management'));
             document.getElementById('user-form').addEventListener('submit', saveUser);
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
         });
     }
 
@@ -1510,8 +1241,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             document.getElementById('user-role').innerHTML = roleOptions;
 
-            pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('users-management'));
             document.getElementById('user-form').addEventListener('submit', saveUser);
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('users-management'));
         });
     }
 
@@ -1583,10 +1314,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
 
         pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>کارهای ارجاع شده به شما</h2>
-            </div>
+            <h2>کارهای ارجاع شده به شما</h2>
             <div class="table-container">
                 <table>
                     <thead>
@@ -1605,16 +1333,12 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
         pageContent.querySelectorAll('.btn-report').forEach(btn => btn.addEventListener('click', (e) => renderInstallationReportForm(e.target.dataset.id)));
     }
 
     function renderInstallationReportForm(subscription_id) {
         pageContent.innerHTML = `
-            <div class="page-header">
-                <button class="btn-back" title="بازگشت به داشبورد نصاب"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>ثبت گزارش نصب برای اشتراک #${subscription_id}</h2>
-            </div>
+            <h2>ثبت گزارش نصب برای اشتراک #${subscription_id}</h2>
             <form id="installation-report-form">
                 <input type="hidden" name="type" value="installation">
                 <input type="hidden" name="target_id" value="${subscription_id}">
@@ -1635,10 +1359,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <textarea id="notes" name="notes" rows="4"></textarea>
                 </div>
                 <button type="submit">ثبت گزارش</button>
+                <button type="button" id="cancel-btn">انصراف</button>
             </form>
         `;
-        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('installer-dashboard'));
         document.getElementById('installation-report-form').addEventListener('submit', saveInstallationReport);
+        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('installer-dashboard'));
     }
 
     async function saveInstallationReport(e) {
