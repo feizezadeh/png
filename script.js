@@ -184,8 +184,8 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'users-management':
                 renderUsersManagement();
                 break;
-            case 'tickets-management':
-                renderTicketsManagement();
+            case 'tasks-management':
+                renderTasksManagement();
                 break;
             case 'installer-dashboard':
                 renderInstallerDashboard();
@@ -482,32 +482,39 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Ticket Management (Company Admin) ---
+    // --- Task Management (Unified View) ---
 
-    async function renderTicketsManagement() {
-        const result = await fetchAPI('api/tickets.php');
+    async function renderTasksManagement() {
+        const result = await fetchAPI('api/tasks.php');
         if (!result || result.status !== 'success') {
-            pageContent.innerHTML = '<h2>خطا در بارگذاری تیکت‌ها</h2>';
+            pageContent.innerHTML = '<h2>خطا در بارگذاری وظایف</h2>';
             return;
         }
 
-        const tickets = result.data;
-        let tableRows = tickets.map(ticket => {
-            let actions = '';
-            if (ticket.status === 'open') {
-                actions = `<button class="btn-refer" data-id="${ticket.id}">ارجاع به پشتیبان</button>`;
-            } else {
-                actions = `ارجاع شده به ${ticket.assigned_to || 'N/A'}`;
-            }
+        const tasks = result.data;
+        if (tasks.length === 0) {
+            pageContent.innerHTML = `
+                <div class="page-header">
+                    <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
+                    <h2>مدیریت وظایف</h2>
+                </div>
+                <p>در حال حاضر هیچ وظیفه باز برای ارجاع وجود ندارد.</p>
+            `;
+            pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
+            return;
+        }
 
+        let tableRows = tasks.map(task => {
+            const taskTypeDisplay = task.type === 'installation' ? 'نصب' : 'پشتیبانی';
+            const taskTypeClass = task.type === 'installation' ? 'status-installation' : 'status-support';
             return `
                 <tr>
-                    <td>${ticket.id}</td>
-                    <td>${ticket.title}</td>
-                    <td>${ticket.subscriber_name}</td>
-                    <td><span class="status-${ticket.status}">${ticket.status}</span></td>
-                    <td>${new Date(ticket.created_at).toLocaleDateString('fa-IR')}</td>
-                    <td>${actions}</td>
+                    <td>${task.id}</td>
+                    <td><span class="status ${taskTypeClass}">${taskTypeDisplay}</span></td>
+                    <td>${task.subject}</td>
+                    <td>${task.title}</td>
+                    <td>${new Date(task.created_at).toLocaleDateString('fa-IR')}</td>
+                    <td><button class="btn-assign" data-id="${task.id}" data-type="${task.type}">ارجاع</button></td>
                 </tr>
             `;
         }).join('');
@@ -515,16 +522,16 @@ document.addEventListener('DOMContentLoaded', () => {
         pageContent.innerHTML = `
             <div class="page-header">
                 <button class="btn-back" title="بازگشت به داشبورد"><i class="fa-solid fa-arrow-right"></i></button>
-                <h2>مدیریت تیکت‌های پشتیبانی</h2>
+                <h2>مدیریت وظایف</h2>
             </div>
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
                             <th>شناسه</th>
-                            <th>عنوان</th>
-                            <th>مشترک</th>
-                            <th>وضعیت</th>
+                            <th>نوع وظیفه</th>
+                            <th>موضوع (مشترک)</th>
+                            <th>عنوان / آدرس</th>
                             <th>تاریخ ایجاد</th>
                             <th>عملیات</th>
                         </tr>
@@ -537,21 +544,26 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('dashboard'));
-        pageContent.querySelectorAll('.btn-refer').forEach(btn => {
+        pageContent.querySelectorAll('.btn-assign').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const ticketId = e.currentTarget.dataset.id;
-                renderReferTicketForm(ticketId);
+                const button = e.currentTarget;
+                renderAssignTaskForm(button.dataset.id, button.dataset.type);
             });
         });
     }
 
-    async function renderReferTicketForm(ticketId) {
-        pageContent.innerHTML = `<h2>ارجاع تیکت #${ticketId}</h2><p>در حال بارگذاری فرم...</p>`;
+    // --- Task Assignment Form ---
 
-        const usersResult = await fetchAPI('api/users.php?role=support');
+    async function renderAssignTaskForm(taskId, taskType) {
+        const roleToFetch = taskType === 'installation' ? 'installer' : 'support';
+        const userRoleName = taskType === 'installation' ? 'نصاب' : 'پشتیبان';
+
+        pageContent.innerHTML = `<h2>ارجاع وظیفه #${taskId}</h2><p>در حال بارگذاری لیست کاربران...</p>`;
+
+        const usersResult = await fetchAPI(`api/users.php?role=${roleToFetch}`);
         if (!usersResult || usersResult.status !== 'success' || usersResult.data.length === 0) {
-            pageContent.innerHTML = '<h2>خطا: هیچ کاربر پشتیبانی در شرکت شما یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>';
-            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tickets-management'));
+            pageContent.innerHTML = `<h2>خطا: هیچ کاربر «${userRoleName}» برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tasks-management'));
             return;
         }
 
@@ -560,35 +572,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredUsers = usersResult.data.filter(user => user.id != currentUserId);
 
         if (filteredUsers.length === 0) {
-            pageContent.innerHTML = '<h2>خطا: هیچ کاربر پشتیبانی دیگری برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>';
-            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tickets-management'));
+            pageContent.innerHTML = `<h2>خطا: هیچ کاربر دیگری برای ارجاع یافت نشد.</h2><button type="button" id="cancel-btn">بازگشت</button>`;
+            document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tasks-management'));
             return;
         }
 
-        const supportUsersOptions = filteredUsers.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
+        const usersOptions = filteredUsers.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
 
         pageContent.innerHTML = `
-            <h2>ارجاع تیکت #${ticketId}</h2>
-            <form id="refer-ticket-form">
-                <input type="hidden" name="target_id" value="${ticketId}">
-                <input type="hidden" name="type" value="support">
+            <div class="page-header">
+                <button class="btn-back" title="بازگشت به لیست وظایف"><i class="fa-solid fa-arrow-right"></i></button>
+                <h2>ارجاع وظیفه ${taskType} #${taskId}</h2>
+            </div>
+            <form id="assign-task-form">
+                <input type="hidden" name="target_id" value="${taskId}">
+                <input type="hidden" name="type" value="${taskType}">
                 <div class="form-group">
-                    <label for="support-user-id">کاربر پشتیبان</label>
-                    <select id="support-user-id" name="user_id" required>
+                    <label for="user-id">کاربر ${userRoleName}</label>
+                    <select id="user-id" name="user_id" required>
                         <option value="">انتخاب کنید...</option>
-                        ${supportUsersOptions}
+                        ${usersOptions}
                     </select>
                 </div>
-                <button type="submit">ارجاع</button>
-                <button type="button" id="cancel-btn">انصراف</button>
+                <button type="submit">ارجاع وظیفه</button>
             </form>
         `;
 
-        document.getElementById('refer-ticket-form').addEventListener('submit', assignTicket);
-        document.getElementById('cancel-btn').addEventListener('click', () => navigateTo('tickets-management'));
+        pageContent.querySelector('.btn-back').addEventListener('click', () => navigateTo('tasks-management'));
+        document.getElementById('assign-task-form').addEventListener('submit', assignTask);
     }
 
-    async function assignTicket(e) {
+    async function assignTask(e) {
         e.preventDefault();
         const form = e.target;
         const formData = new FormData(form);
@@ -601,9 +615,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (result && result.status === 'success') {
             alert(result.message);
-            navigateTo('tickets-management');
+            navigateTo('tasks-management');
         }
     }
+
 
     // --- CRUD for FATs ---
 
