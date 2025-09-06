@@ -34,6 +34,7 @@ try {
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['username'];
         $_SESSION['role'] = $user['role'];
+        $_SESSION['company_id'] = $user['company_id'];
         $_SESSION['permissions'] = json_decode($user['permissions'], true) ?? [];
         $_SESSION['logged_in'] = true;
 
